@@ -1,0 +1,64 @@
+name: app-deploy
+
+# Build + push the app image on merge to main. The Fargate rollout (targeted terraform apply)
+# is wired in Phase 4 once the ECS service module exists.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "Dockerfile"
+      - ".dockerignore"
+      - ".github/workflows/app-deploy.yml"
+  workflow_dispatch:
+    inputs:
+      env:
+        description: Environment
+        type: choice
+        options: [dev]
+        default: dev
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: us-east-1
+  ENV: ${{ github.event.inputs.env || 'dev' }}
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.env || 'dev' }}
+    concurrency:
+      group: terraform-apply-${{ github.event.inputs.env || 'dev' }}  # serialize with infra applies
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: ECR login
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - name: build & push image
+        id: build
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          IMAGE="${REGISTRY}/eop-${ENV}-app:${GITHUB_SHA}"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+      - name: record image to SSM
+        run: |
+          aws ssm put-parameter --name "/eop/${ENV}/app_image" \
+            --type String --overwrite --value "${{ steps.build.outputs.image }}"
+      # Phase 4: roll the image onto Fargate without clobbering other infra:
+      # - name: deploy (targeted apply)
+      #   working-directory: deploy/terraform
+      #   run: |
+      #     terraform init -input=false -backend-config=envs/${ENV}.backend.hcl
+      #     terraform apply -input=false -auto-approve -target=module.app \
+      #       -var-file=envs/${ENV}.tfvars -var="app_image=${{ steps.build.outputs.image }}"

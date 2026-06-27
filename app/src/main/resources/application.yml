@@ -1,0 +1,30 @@
+server:
+  port: 8080
+  forward-headers-strategy: framework   # behind ALB: trust X-Forwarded-* for correct redirect URIs
+
+spring:
+  application:
+    name: enterprise-onboarding-app
+
+# Actuator: keep the surface tiny. /healthz is our own controller; actuator stays internal-only.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+# ---- Placeholders wired in later phases (all sourced from env, never committed) ----
+# entra:
+#   tenant-id:        ${ENTRA_TENANT_ID}              # 5b7b1ae8-bcc5-485f-ad46-cb099090670e
+#   app-client-id:    ${ENTRA_APP_CLIENT_ID}          # created in Phase 3
+# wif:
+#   issuer-host:      ${WIF_ISSUER_HOST}              # https://<cloudfront-domain>  (Phase 2)
+#   subject:          ${WIF_SUBJECT}                  # workload subject in the federated credential
+#   signing-secret-arn: ${WIF_SIGNING_SECRET_ARN}     # Secrets Manager ARN (Phase 2)
+logging:
+  level:
+    com.eop: INFO

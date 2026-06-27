@@ -1,0 +1,33 @@
+# Java / Maven
+target/
+*.class
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfplan
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# Secrets — never commit any of these
+*.pem
+*.key
+*.p12
+*.pfx
+.env
+.env.*
+
+# OS / IDE
+.DS_Store
+.idea/
+*.iml
+.vscode/

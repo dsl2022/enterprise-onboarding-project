@@ -1,0 +1,39 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  app:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Authoritative build path (ADR-0008): the Dockerfile's maven:temurin-21 stage builds the jar.
+      - name: Docker build (compiles + packages the app)
+        run: docker build -t eop-app:ci .
+
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: deploy/terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.6
+      - name: fmt
+        run: terraform fmt -recursive -check -diff
+      - name: init (no backend)
+        run: terraform init -backend=false -input=false
+      - name: validate
+        run: terraform validate -no-color
