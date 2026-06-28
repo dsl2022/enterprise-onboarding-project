@@ -9,10 +9,12 @@
 locals {
   repo = "${var.github_owner}/${var.github_repo}"
 
-  # Microsoft Graph app id + the Application.ReadWrite.OwnedBy app-role id.
+  # Microsoft Graph app id + the Application.ReadWrite.All app-role id.
   # (Verified against the live Graph service principal; this is a global constant.)
+  # NB: Application.ReadWrite.OwnedBy is NOT sufficient — creating a service principal
+  # and federated credential for the workload app (Phase 3) requires Application.ReadWrite.All.
   graph_app_id      = "00000003-0000-0000-c000-000000000000"
-  graph_app_role_id = "18a4783c-866b-4cc7-a460-3d5e5662c884"
+  graph_app_role_id = "1bfefb4e-e0b5-418b-a88f-73c46d2cc8e9"
 
   # One federated credential per GitHub subject (same multi-subject pattern as AWS).
   fics = {
@@ -30,8 +32,8 @@ data "azuread_service_principal" "msgraph" {
 resource "azuread_application" "ci" {
   display_name = "eop-github-ci"
 
-  # Graph application permission to manage app registrations it owns. Granted
-  # (admin-consented) below via azuread_app_role_assignment.
+  # Graph application permission to manage app registrations, service principals, and
+  # federated credentials. Granted (admin-consented) below via azuread_app_role_assignment.
   required_resource_access {
     resource_app_id = local.graph_app_id
     resource_access {
@@ -56,10 +58,10 @@ resource "azuread_application_federated_identity_credential" "gh" {
   audiences             = ["api://AzureADTokenExchange"]
 }
 
-# Admin consent: grant the Application.ReadWrite.OwnedBy app role to the CI SP.
+# Admin consent: grant the Application.ReadWrite.All app role to the CI SP.
 # Terraform equivalent of `az ad app permission admin-consent`; requires the
 # running identity to be a tenant admin (Privileged Role Admin / Global Admin).
-resource "azuread_app_role_assignment" "graph_owned_by" {
+resource "azuread_app_role_assignment" "graph_app_rw" {
   app_role_id         = local.graph_app_role_id
   principal_object_id = azuread_service_principal.ci.object_id
   resource_object_id  = data.azuread_service_principal.msgraph.object_id

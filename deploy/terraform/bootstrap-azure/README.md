@@ -12,9 +12,11 @@ Replaces `RUNBOOK.md` section **3**.
 - `eop-github-ci` Entra **application** + **service principal** (no client secret)
 - **3 federated identity credentials** — one per GitHub subject (`pull_request`,
   `environment:dev`, `ref:refs/heads/main`), same multi-subject pattern as the AWS roles
-- **Graph `Application.ReadWrite.OwnedBy`** app permission + **admin consent**
+- **Graph `Application.ReadWrite.All`** app permission + **admin consent**
   (via `azuread_app_role_assignment` — the Terraform equivalent of
-  `az ad app permission admin-consent`)
+  `az ad app permission admin-consent`). Needed so CI can create the workload app's
+  **service principal** and **federated credential** (Phase 3); `Application.ReadWrite.OwnedBy`
+  is insufficient for service-principal creation.
 - GitHub secrets **`AZURE_CLIENT_ID`** / **`AZURE_TENANT_ID`** (toggle `manage_github_secrets`)
 
 **Stays manual:** §4 consent for the *workload* app (created by the main stack in
