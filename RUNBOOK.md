@@ -297,6 +297,11 @@ Phase 3a declares the **6 portal app roles** on `eop-dev-app` and seeds **app-ro
 test users. No Graph consent is needed (app roles are app-local, not Graph permissions). Order matters
 to avoid locking anyone out.
 
+> **Baseline role = `APPLICATION_OWNER`, NOT `READ_ONLY`.** `access.request` is granted only to
+> `APPLICATION_OWNER`/`SSO_OPERATIONS`/`ADMIN`/`SUPER_ADMIN` — so a self-serving employee whose baseline
+> is `READ_ONLY` (or no role) is **all-403 on requests**. There is no lean "requester/employee" role in
+> the 6-role model (a 7th role would be a Phase-5 CR); `APPLICATION_OWNER` is the correct baseline.
+
 **1. Get each test user's object id** (objectIds aren't secret):
 ```bash
 az ad user show --id testuser@job2019tmmgmail.onmicrosoft.com --query id -o tsv

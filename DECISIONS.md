@@ -166,3 +166,38 @@ Entra change so a forgotten assignment can't be entangled with engine logic.
 (6 roles + assignments). Module graph stays acyclic (`platform`/`auth`/`request` → `authz`; never the
 reverse) — enforced by ArchUnit. RFC-7807 + correlation ids formalized in `platform`. Real per-role
 logins + impersonation demo end-to-end once the app-role assignments are applied (RUNBOOK §8).
+
+## ADR-0014 — Phase 3b: the request workflow engine
+**Context:** Phases 4 (onboarding) and 5 (access) need one shared request lifecycle — aggregate, state
+machine, concurrency control, and a domain-event spine — built on Phase 2 (Postgres/Flyway) and 3a
+(`authz`). Reviewed by the consultant + senior architect; their conditions are folded in below.
+**Decision:**
+- **One `Request` aggregate** (`request.requests`) for both types; identity columns
+  (`requester`/`submitted_by`) are first-class, NOT in `payload`, so SoD/ABAC never parse JSON. `payload`
+  (jsonb) is opaque to the engine (type-specific shape owned by 4/5).
+- **Authoritative serializer:** `UPDATE … WHERE id=:id AND status=:from AND version=:expected` succeeds
+  for exactly one caller — this is the single lock for concurrent approvers AND (Phase 4) the provisioning
+  work-claim (`APPROVED → PROVISIONING`, one poller wins → only it calls Graph, no double-provision).
+  An **explicit `version` column** (not JPA `@Version`) because the guard must also assert "status is
+  still `:from`", which `@Version` can't express; it also lets us split 409 (state moved) from 412
+  (version moved) by re-reading on `rowcount=0`.
+- **Check order — authorize before revealing state:** load (404) → **authz on the real principal (403)**
+  → If-Match (412) → legal-from (409) → guarded UPDATE → same-tx timeline + outbox. An unauthorized
+  caller never learns whether a request is stale or decidable (architect/consultant condition).
+- **Events:** every transition writes a `request.request_events` row + a `messaging.outbox` row in the
+  **same tx** via the generic `platform.OutboxWriter` (outbox in a shared `messaging` schema so no module
+  touches another's tables; relay is Phase 6). The "event ⇔ transition" invariant is **scoped to the
+  transition path** — the engine also allows **non-transition events** (`provisioning_failed`) with no
+  status change so a stuck request is visible; `request_events` uses a global `bigserial` id (total order)
+  so those append safely off the version-serialized path.
+- **`SUBMITTED → UNDER_REVIEW` auto-advances** on submit (the frozen contract has no pickup endpoint, and
+  `/review-queue` returns `UNDER_REVIEW`, so resting at `SUBMITTED` would leave the queue always empty);
+  `SUBMITTED` is still recorded in the timeline.
+- **No terminal `FAILED` state** (frozen enums have none) → provisioning is retry-until-success;
+  `external_ref` on the aggregate lets a retry be find-or-create (idempotent onboarding), not blind
+  create. A real `FAILED` state is a future CR if ops needs one.
+**Consequences:** No HTTP in 3b (engine + `RequestService` only; first HTTP transition is Phase 4 with
+full contract tests). Additive: V2 (platform-owned `messaging.outbox`) + V3 (request-owned `requests` +
+`request_events`); no infra/TF change → an `app-deploy` image roll. Module graph stays acyclic
+(`request → authz, platform`), ArchUnit-enforced. 28 tests green incl. concurrent-approver and
+impersonation-laundering against real Postgres.
