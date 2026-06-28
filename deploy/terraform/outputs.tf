@@ -30,3 +30,18 @@ output "issuer_signing_secret_arn" {
 output "issuer_task_access_policy_arn" {
   value = module.issuer.task_access_policy_arn
 }
+
+# ---- Phase 3: Entra config ----
+output "entra_app_client_id" {
+  description = "Run admin consent on this client id (RUNBOOK §4); also the client_id for the WIF exchange."
+  value       = module.entra.app_client_id
+}
+
+output "entra_service_principal_object_id" {
+  value = module.entra.service_principal_object_id
+}
+
+output "workload_subject" {
+  description = "WIF subject — set as the app's WIF_SUBJECT env in Phase 4."
+  value       = module.entra.workload_subject
+}
