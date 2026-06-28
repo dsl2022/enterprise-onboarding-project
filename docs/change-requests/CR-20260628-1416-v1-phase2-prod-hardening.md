@@ -1,4 +1,4 @@
-# CR-20260628-1416 — Phase 2 data-layer prod-hardening (deferred items)
+# CR-20260628-1416 — v1 Phase 2 data-layer prod-hardening (deferred items)
 
 - **ID:** CR-20260628-1416
 - **Date:** 2026-06-28 14:16 EDT
