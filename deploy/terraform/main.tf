@@ -48,10 +48,13 @@ module "edge" {
 module "entra" {
   source = "./modules/entra"
 
-  app_display_name     = "${local.name_prefix}-app"
-  issuer_url           = module.issuer.issuer_url
-  workload_subject     = local.workload_subject
-  redirect_uris        = ["${module.edge.app_url}/login/oauth2/code/entra"]
+  app_display_name = "${local.name_prefix}-app"
+  issuer_url       = module.issuer.issuer_url
+  workload_subject = local.workload_subject
+  redirect_uris = [
+    "${module.edge.app_url}/login/oauth2/code/entra", # Flow 1 login callback
+    "${module.edge.app_url}/",                        # OIDC post-logout redirect target
+  ]
   create_client_secret = true
 }
 

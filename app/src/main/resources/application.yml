@@ -6,6 +6,10 @@ spring:
   application:
     name: enterprise-onboarding-app
 
+# External base URL (CloudFront). Used for the OIDC post-logout redirect target.
+app:
+  base-url: ${APP_BASE_URL:}
+
 # Actuator: keep the surface tiny. /healthz is our own controller; actuator stays internal-only.
 management:
   endpoints:
