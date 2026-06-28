@@ -66,6 +66,19 @@ version tags (e.g. `@v4`) for the first PR because SHAs can't be resolved offlin
 **Decision (deferred):** Before merging to `main` for real use, replace tag pins with commit SHAs.
 Tracked as a hardening task.
 
+## ADR-0011 — CI Entra identity needs Application.ReadWrite.All (not OwnedBy)
+**Context:** Phase 3's first apply failed: `eop-github-ci` (granted `Application.ReadWrite.OwnedBy`)
+could create the workload `azuread_application` but got `403 Authorization_RequestDenied` creating its
+**service principal** and **federated identity credential**. Per Microsoft Graph, creating a service
+principal requires `Application.ReadWrite.All`; `OwnedBy` is insufficient.
+**Decision:** Upgrade the CI app's Graph permission to **`Application.ReadWrite.All`**
+(`1bfefb4e-…`, admin-consented) in `deploy/terraform/bootstrap-azure`. Re-apply the bootstrap-azure
+layer (run by a Global Admin via `az login`), then re-run the Phase 3 apply.
+**Consequences:** The CI identity can now manage all app registrations/SPs in the tenant — broader than
+OwnedBy, but the standard permission for a Terraform-manages-Entra CI identity. It still **cannot grant
+admin consent** for the workload app's `Group.Read.All` (that remains the human Global-Admin step,
+RUNBOOK §4). Auth stays OIDC-federated — no client secret.
+
 ## ADR-0010 — Issuer signing key lives only in Secrets Manager; the app owns it
 **Context:** The workload OIDC issuer needs an RSA keypair: the private key signs assertions, the public
 key is published as JWKS. Terraform can't compute the JWK modulus/exponent (`n`/`e`) in pure HCL, and
