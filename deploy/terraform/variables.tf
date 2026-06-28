@@ -25,3 +25,9 @@ variable "log_retention_days" {
   type        = number
   default     = 14
 }
+
+variable "multi_az" {
+  description = "Static bool: prod HA for the data + cache layers (RDS Multi-AZ, Redis replica + failover). Dev default is single-AZ/single-node (cheaper; Redis is then a session SPOF, not HA)."
+  type        = bool
+  default     = false
+}

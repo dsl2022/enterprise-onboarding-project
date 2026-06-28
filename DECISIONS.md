@@ -93,3 +93,44 @@ boot (Phase 4) — acceptable because Entra only fetches it at the Phase 5 excha
 is limited to the discovery doc over HTTPS. Issuer beans are gated by `wif.enabled` (off in Phase
 1/local/CI), so the app boots with no AWS dependency until Phase 4. CloudFront uses Managed-
 CachingDisabled so a rotated key's JWKS propagates immediately.
+
+## ADR-0012 — Phase 2 data layer: RDS-managed master secret on the CMK; pgvector via Flyway; Redis-backed BFF session
+**Context:** v1 needs persistence (Postgres, with pgvector for the later assistant) and a session store
+that lets Fargate run ≥2 stateless tasks (Phase 8). The v0 spine (single TF state, SSM image pointer,
+gated `infra` apply, CMK, private subnets, task SG with open egress) must be reused, not forked.
+**Decision:**
+- **`modules/data` (RDS Postgres 16, `db.t4g.micro`, single-AZ; `multi_az` flag for prod).** The master
+  password is **RDS-managed** (`manage_master_user_password = true`) so it never enters TF state — and it
+  is pinned to the **project CMK** (`master_user_secret_kms_key_id = kms_key_arn`), *not* the
+  `aws/secretsmanager` default key, so the ECS **execution role's existing `kms:Decrypt` grant** on that
+  CMK covers secret injection. The task pulls `username`/`password` from the secret JSON via ECS's
+  `:json-key::` suffix; only non-secret coordinates (`DB_HOST/PORT/NAME`) are plain env.
+- **pgvector is enabled by a Flyway migration** (`CREATE EXTENSION vector`), not an RDS parameter group —
+  app-owned, and works identically on the `pgvector/pgvector:pg16` test image (both have superuser/
+  `rds_superuser`). `V1__baseline.sql` creates **one schema per owning module** (no tables yet) to
+  enforce the "no cross-module table access" boundary at the DB level — **7 schemas; `assistant` is
+  omitted** until its deferred track lands its own migration (CR-1416).
+- **`modules/cache` (ElastiCache Redis, `cache.t4g.micro`).** Default is a **single node — a session
+  SPOF, not HA** (labeled honestly in code + RUNBOOK); `multi_az` toggles `num_cache_clusters`,
+  `automatic_failover_enabled`, and `multi_az_enabled` together. At-rest encryption is pinned to the
+  **project CMK** (consistency with RDS storage/secret + the log group; ElastiCache grants on it via the
+  apply principal, allowed by the CMK's root `kms:*` IAM delegation). Spring Session stores the BFF
+  session here. **Default JDK serialization was proven** (Testcontainers round-trip: an OIDC
+  `SecurityContext` with principal + authorities survives a Redis save/reload intact), so no
+  `SecurityJackson2Modules` serializer is needed; revisit only if that test ever fails (CR-1416 item 5).
+- **Boot-race handling:** the `service` references the RDS endpoint, so TF orders DB creation (and its
+  ~10-min `available` wait) *before* tasks roll; belt-and-suspenders, the app retries the Flyway/JDBC
+  connection on boot and the ECS health-check grace is raised to 300s. The ALB target-group check stays
+  on the dependency-free `/healthz`; DB/Redis appear only in actuator **readiness** for observability.
+**Consequences:** No new secret material in state or repo; teardown stays clean (`skip_final_snapshot`,
+`deletion_protection=false`, managed secret deletes with the instance, Redis no final snapshot). Adds
+~a few $/day when applied → `infra-destroy` between sessions. The dev app still connects as the RDS
+master user; the locked-down audit DB role (INSERT/SELECT only) is deferred to Phase 6 where the
+`audit_events` table exists. Tests run in a dedicated CI `test` job (`mvn -B verify`, Testcontainers on
+the runner's Docker); the image-build job keeps `-DskipTests`.
+**Known gap (CR-1416, deferred to Phase 6 / prod):** the RDS-managed master password auto-rotates
+(~7-day default), but ECS injects `DB_USERNAME`/`DB_PASSWORD` only at task start — so post-rotation a
+long-lived task fails on its next *new* pooled connection (Hikari `maxLifetime` recycle, ~30 min), not
+just on restart. Harmless in dev (sessions < 7 days, disposable); the prod fix is a least-privilege,
+app-managed app role (or IAM DB auth, or re-reading the secret on rotation), tracked with the
+master-user/locked-down-role work in Phase 6.

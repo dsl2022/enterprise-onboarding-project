@@ -1,0 +1,39 @@
+# Active under the `data` profile (SPRING_PROFILES_ACTIVE=auth,data on ECS). Brings up persistence
+# (JPA/Postgres + Flyway) and the Redis-backed BFF session. Additive to `auth`: local/CI boots that
+# don't set this profile need no DB or Redis. All coordinates from env; the DB password is injected
+# by ECS from the RDS-managed secret (never committed, never an env literal in TF).
+spring:
+  datasource:
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT:5432}/${DB_NAME:eop}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    hikari:
+      # On the first Phase-2 roll RDS may still be initializing. Don't hard-fail the pool at startup;
+      # Flyway's connect-retries (below) does the actual waiting before the first query.
+      initialization-fail-timeout: -1
+  jpa:
+    # Flyway owns the schema; Hibernate only validates against it (no auto-DDL in any env).
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+    # ~10 min RDS cold-start budget (60 * 10s) so the app waits the DB out instead of crash-looping.
+    connect-retries: 60
+    connect-retries-interval: 10
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+  session:
+    store-type: redis
+    timeout: 30m
+
+# Readiness reflects DB + Redis for observability ONLY. The ALB target-group check stays on the
+# dependency-free /healthz controller — a transient DB blip must not cycle every task.
+management:
+  endpoint:
+    health:
+      group:
+        readiness:
+          include: readinessState, db, redis

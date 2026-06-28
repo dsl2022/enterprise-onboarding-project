@@ -55,3 +55,19 @@ output "app_url" {
 output "ecs_cluster_name" {
   value = module.service.cluster_name
 }
+
+# ---- Phase 2: data layer ----
+output "db_endpoint" {
+  description = "RDS Postgres hostname (private). The DB password lives only in the RDS-managed secret."
+  value       = module.data.endpoint
+}
+
+output "db_master_secret_arn" {
+  description = "RDS-managed master-user secret (CMK-encrypted). The task injects username/password from it."
+  value       = module.data.master_user_secret_arn
+}
+
+output "redis_endpoint" {
+  description = "ElastiCache Redis primary endpoint (private). Single node in dev = session SPOF, not HA."
+  value       = module.cache.primary_endpoint
+}

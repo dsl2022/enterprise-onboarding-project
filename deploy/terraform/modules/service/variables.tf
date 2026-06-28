@@ -50,3 +50,20 @@ variable "create_flow1_secret" {
   type        = bool
   default     = false
 }
+
+# --- Phase 2: data + cache (DB password injected from the RDS-managed secret; never an env literal) ---
+variable "db_host" { type = string }
+variable "db_port" {
+  type    = number
+  default = 5432
+}
+variable "db_name" { type = string }
+variable "db_master_secret_arn" {
+  description = "ARN of the RDS-managed master-user secret (CMK-encrypted JSON). username/password injected via ECS secrets."
+  type        = string
+}
+variable "redis_host" { type = string }
+variable "redis_port" {
+  type    = number
+  default = 6379
+}
