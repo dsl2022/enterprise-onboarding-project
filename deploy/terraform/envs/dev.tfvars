@@ -5,17 +5,18 @@ entra_tenant_id    = "5b7b1ae8-bcc5-485f-ad46-cb099090670e"
 # app_image is injected by app-deploy.yml via -var; left unset for plain infra plans.
 
 # ---- Phase 3a: portal RBAC seed (Entra app roles) ----
-# Assign test users to the 6 app roles. principal_object_id = the user's Entra object id
-# (az ad user show --id <upn> --query id -o tsv). objectIds aren't secret. Include ONE multi-role
-# user (two rows, same id) to exercise the permission union. Assign EVERY login (testuser + your GA)
-# a role BEFORE flipping entra_require_app_role_assignment=true, or sign-in breaks. See RUNBOOK §8.
-# entra_app_role_assignments = [
-#   { role = "APPLICATION_OWNER", principal_object_id = "<owner-user-oid>" },
-#   { role = "SSO_OPERATIONS",    principal_object_id = "<ops-user-oid>" },
-#   { role = "ADMIN",             principal_object_id = "<admin-user-oid>" },
-#   { role = "AUDITOR",           principal_object_id = "<auditor-user-oid>" },
-#   { role = "READ_ONLY",         principal_object_id = "<readonly-user-oid>" },
-#   { role = "SUPER_ADMIN",       principal_object_id = "<superadmin-user-oid>" },
-#   { role = "AUDITOR",           principal_object_id = "<owner-user-oid>" }, # multi-role: owner+auditor union
-# ]
-# entra_require_app_role_assignment = true   # flip ONLY after the assignments above are applied & verified
+# principal_object_id = the user's Entra object id (objectIds aren't secret). Assign EVERY interactive
+# login a role BEFORE flipping entra_require_app_role_assignment=true, or sign-in breaks. RUNBOOK §8.
+#   GA  Jizong Liang (job2019tmm_gmail.com#EXT#@…) = eabe2f29-7b13-4991-bccc-804869d55c30 → SUPER_ADMIN
+#       (test every role via impersonation)
+#   testuser@job2019tmmgmail.onmicrosoft.com       = 31770d7d-c707-4115-94b7-8f2dbd1cfaf6 → APPLICATION_OWNER
+#       (a real, non-super owner: exercises ABAC ownership + SoD-as-requester)
+entra_app_role_assignments = [
+  { role = "SUPER_ADMIN", principal_object_id = "eabe2f29-7b13-4991-bccc-804869d55c30" },
+  { role = "APPLICATION_OWNER", principal_object_id = "31770d7d-c707-4115-94b7-8f2dbd1cfaf6" },
+]
+
+# Leave enforcement OFF for this first assignment apply. After verifying both logins resolve their roles
+# at /api/v1/me (and Super Admin impersonation works), set this true in a follow-up apply to require an
+# app-role assignment for sign-in.
+# entra_require_app_role_assignment = true
