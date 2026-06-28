@@ -1,0 +1,10 @@
+# OpenAPI lint ruleset (CI gate) — keeps the frozen contract from drifting invalid.
+extends: ["spectral:oas"]
+rules:
+  # Draft contract: don't fail CI on doc-completeness nits.
+  operation-operationId: off
+  operation-description: off
+  operation-tag-defined: off
+  info-contact: off
+  info-license: off
+  oas3-api-servers: off
