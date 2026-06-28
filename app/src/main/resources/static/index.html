@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Enterprise Onboarding — v0 skeleton</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 3rem auto; padding: 0 1rem; }
+    button { font-size: 1rem; padding: .6rem 1rem; margin: .25rem .25rem 0 0; cursor: pointer; }
+    pre { background: #f4f4f5; padding: 1rem; border-radius: 6px; overflow:auto; }
+    .muted { color: #666; }
+  </style>
+</head>
+<body>
+  <h1>Enterprise Onboarding — v0</h1>
+  <p class="muted">Throwaway UI. Proves Flow 1 (Entra SSO) and Flow 2 (Graph via WIF).</p>
+
+  <p>
+    <a href="/auth/login"><button>Sign in with Microsoft</button></a>
+    <button onclick="call('/auth/me')">Who am I (/auth/me)</button>
+    <button onclick="call('/api/graph/groups')">List my groups (/api/graph/groups)</button>
+    <a href="/auth/logout"><button>Sign out</button></a>
+  </p>
+
+  <pre id="out">Click a button…</pre>
+
+  <script>
+    async function call(path) {
+      const out = document.getElementById('out');
+      out.textContent = 'GET ' + path + ' …';
+      try {
+        const res = await fetch(path, { credentials: 'same-origin' });
+        const text = await res.text();
+        let body; try { body = JSON.stringify(JSON.parse(text), null, 2); } catch { body = text; }
+        out.textContent = 'HTTP ' + res.status + '\n\n' + body;
+      } catch (e) {
+        out.textContent = 'Request failed: ' + e;
+      }
+    }
+  </script>
+</body>
+</html>

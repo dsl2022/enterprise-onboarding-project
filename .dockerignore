@@ -1,0 +1,10 @@
+**/target/
+**/.git/
+**/.idea/
+**/.vscode/
+deploy/
+.github/
+*.md
+*.pem
+*.key
+.env*

@@ -1,0 +1,5 @@
+# Local state for this self-contained Azure bootstrap layer.
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.tfstate.lock.info

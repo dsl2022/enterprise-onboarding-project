@@ -1,0 +1,67 @@
+# Architecture Decision Records
+
+Short ADRs. Newest decisions appended. Status: Accepted unless noted.
+
+## ADR-0001 — Reuse the godaddy CI/CD pattern verbatim
+**Context:** `/Users/dmml/interview-2026/godaddy` already has a working, OIDC-federated, zero-stored-credential
+Terraform + GitHub Actions setup (S3+DynamoDB remote state, partial backend config, three GitHub→AWS
+OIDC roles keyed on `sub` per trigger, `infra.yml`/`infra-destroy.yml`/`app-deploy.yml`/`ci.yml`,
+env-gated applies, `modules/{network,platform,app}`, `bootstrap/`).
+**Decision:** Reuse the layout, workflow shapes, backend strategy, OIDC role/sub patterns, naming
+(`<project>-<env>` prefix, `Project/Env/ManagedBy` default tags) unchanged. Change only the project
+prefix to `eop` and extend with the Azure side.
+**Consequences:** Fast, consistent, low-risk. Drop godaddy's `audit_trail` module and Go/Lambda/SQS
+pieces (out of scope for v0).
+
+## ADR-0002 — All Terraform runs in CI; no local apply
+**Decision:** `terraform apply` only runs in GitHub Actions, gated by the `dev` GitHub Environment
+(required reviewer). Plans run on PR and post as a comment. No "ask in chat before apply" — the PR +
+environment review is the guardrail. Local use is limited to `fmt`/`validate` (`init -backend=false`).
+
+## ADR-0003 — Azure is config-only → `azuread` provider only, no `azurerm`/subscription
+**Context:** v0 deploys **no** Azure compute. The only Azure objects are an Entra app registration, a
+federated identity credential, and Graph app permission — all directory objects.
+**Decision:** Use only the Terraform `azuread` provider. Do **not** add `azurerm` or require an Azure
+subscription id. The CI Entra app (`eop-github-ci`) is granted directory permission to manage app
+registrations (`Application.ReadWrite.OwnedBy`) and uses `azure/login` with `allow-no-subscriptions: true`.
+**Consequences:** Removes an entire credential/permission surface (no Contributor-on-subscription). If
+we later deploy Azure resources, revisit and add `azurerm` + subscription.
+
+## ADR-0004 — Call Microsoft Graph via raw REST (`RestClient`), not the Graph Java SDK
+**Context:** The WIF token comes from our **self-hosted** OIDC issuer via a custom client-assertion
+flow. The Graph Java SDK's auth model assumes an `azure-identity TokenCredential`.
+**Decision:** Use Spring's `RestClient` for both the Entra token exchange and the single Graph call.
+**Consequences:** Less code than adapting the SDK; `@odata.nextLink` paging and `429`/`Retry-After` are
+explicit and legible (supports the learning checkpoints); smaller image, fewer deps. Revisit if Graph
+surface grows.
+
+## ADR-0005 — One Terraform state file; order issuer before Azure federated credential
+**Context:** The Azure federated identity credential needs the CloudFront issuer URL, which AWS
+produces. godaddy uses a single state file.
+**Decision:** Keep a single state file. Wire the CloudFront issuer module output into the
+`azuread_application_federated_identity_credential` via module reference (no second state, no manual
+URL copy-paste). Issuer (Phase 2) is created before the Azure config (Phase 3).
+
+## ADR-0006 — Single Entra app registration for both flows in v0
+**Decision:** One app registration carries both the Flow 1 web/redirect config (delegated scopes +
+client secret in AWS Secrets Manager) and the Flow 2 federated identity credential + `Group.Read.All`
+application permission. Document that it could be split into two registrations later.
+
+## ADR-0007 — CloudFront default domain as the issuer host
+**Decision:** Use the CloudFront distribution's default `*.cloudfront.net` domain as both the issuer
+host and the app entry point for v0 (zero cost, zero DNS, stable HTTPS, Entra-trustable). The
+discovery doc's `issuer` field is set to exactly `https://<distribution-domain>`. Revisit with a real
+domain + ACM if a custom hostname is needed.
+
+## ADR-0008 — CI builds the image via Docker; no local Maven required
+**Context:** No Maven installed locally; authoritative image build happens in CI anyway.
+**Decision:** The Dockerfile uses a `maven:3.9-eclipse-temurin-21` build stage so `docker build` is the
+only thing needed to produce the jar (locally and in CI). No Maven/Gradle wrapper is committed.
+**Consequences:** `ci.yml` builds via `docker build` (also Trivy-scannable); developers without Maven
+use Docker. Revisit if we want fast non-Docker unit-test runs in CI (add `setup-java` + a wrapper then).
+
+## ADR-0009 (TODO/hardening) — Pin GitHub Actions to commit SHAs
+**Context:** godaddy pins all third-party actions to commit SHAs (supply-chain). This scaffold pins to
+version tags (e.g. `@v4`) for the first PR because SHAs can't be resolved offline.
+**Decision (deferred):** Before merging to `main` for real use, replace tag pins with commit SHAs.
+Tracked as a hardening task.
