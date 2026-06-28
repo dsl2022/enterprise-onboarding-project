@@ -29,7 +29,11 @@ env:
 jobs:
   build-deploy:
     runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.env || 'dev' }}
+    # No `environment:` here on purpose: this job assumes the DEPLOY role, whose
+    # trust is keyed to the main-branch subject (sub=...:ref:refs/heads/main).
+    # Declaring an environment would change the OIDC token sub to
+    # ...:environment:<env> and break sts:AssumeRoleWithWebIdentity. The env-gated
+    # APPLY role (infra.yml) is the one keyed to :environment:dev.
     concurrency:
       group: terraform-apply-${{ github.event.inputs.env || 'dev' }}  # serialize with infra applies
       cancel-in-progress: false
