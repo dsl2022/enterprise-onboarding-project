@@ -89,6 +89,12 @@
       <artifactId>spring-boot-starter-test</artifactId>
       <scope>test</scope>
     </dependency>
+    <!-- Phase 3a: oidcLogin() + role-claim test support for the identity endpoints. -->
+    <dependency>
+      <groupId>org.springframework.security</groupId>
+      <artifactId>spring-security-test</artifactId>
+      <scope>test</scope>
+    </dependency>
 
     <!-- Phase 2 tests: Testcontainers (real PG w/ pgvector + Redis via @ServiceConnection) and
          ArchUnit (module-boundary rules, scaffolded now for later phases). -->

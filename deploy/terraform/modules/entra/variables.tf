@@ -25,6 +25,29 @@ variable "create_client_secret" {
   default     = false
 }
 
+variable "require_app_role_assignment" {
+  description = "If true, only users assigned an app role can sign in (interactive Flow-1 only; WIF unaffected). Default false: flip on AFTER assigning roles to every login (incl. testuser + GA), else login breaks."
+  type        = bool
+  default     = false
+}
+
+variable "app_role_assignments" {
+  description = "Test-user portal app-role seed. Each: {role = one of the 6 role values, principal_object_id = Entra user objectId}. Human-provided at apply (envs/dev.tfvars); empty keeps plans valid before objectIds exist."
+  type = list(object({
+    role                = string
+    principal_object_id = string
+  }))
+  default = []
+
+  validation {
+    condition = alltrue([
+      for a in var.app_role_assignments :
+      contains(["APPLICATION_OWNER", "SSO_OPERATIONS", "ADMIN", "AUDITOR", "READ_ONLY", "SUPER_ADMIN"], a.role)
+    ])
+    error_message = "Each app_role_assignments.role must be one of the six portal roles."
+  }
+}
+
 variable "graph_app_id" {
   description = "Microsoft Graph resource app id (global constant)."
   type        = string
