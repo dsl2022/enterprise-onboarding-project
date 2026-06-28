@@ -57,5 +57,14 @@ re-logins**. Revisit JSON serialization before prod. *(senior-architect)*
 validate` with Flyway owning schema.
 
 ## Resolution
-_Open. Each item resolves in its noted phase; record the implementing commit/PR here as they land
-(item 3 at the Phase 2 first apply; items 1–2 at Phase 6; items 4–5 at prod hardening / Phase 10)._
+
+**"Applied directly in PR #13" — done** (this follow-up commit on `v1-phase2-data`):
+- Redis `at_rest_encryption` pinned to the project CMK (`modules/cache`: `kms_key_id = var.kms_key_arn`,
+  new `kms_key_arn` var wired from `module.platform`).
+- ADR-0012 gains the rotation-vs-injection Consequences line (item 1) + the Redis-CMK + 7-schema notes.
+- `assistant` schema dropped from `V1__baseline.sql` (and `DataLayerTest` now asserts it is absent).
+
+**Deferred items remain Open**, each resolving in its noted phase — record the implementing commit/PR
+here as they land: item 3 at the Phase 2 first apply (Flyway/boot log shows `CREATE EXTENSION vector`
+on real RDS; RUNBOOK §7 verify step); items 1–2 at Phase 6 (least-privilege/locked-down DB roles);
+items 4–5 at prod hardening / Phase 10 (Redis transit encryption + AUTH; JSON session serialization).

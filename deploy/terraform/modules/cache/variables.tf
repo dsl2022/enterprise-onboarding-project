@@ -7,6 +7,11 @@ variable "task_security_group_id" {
   type        = string
 }
 
+variable "kms_key_arn" {
+  description = "Project CMK for at-rest encryption — consistency with RDS storage/secret + the log group (ElastiCache creates a grant on it via the apply principal; the CMK's root kms:* delegates to IAM)."
+  type        = string
+}
+
 variable "multi_az" {
   description = <<-EOT
     Static bool. false (dev default) = a SINGLE node — this is a session SPOF, NOT highly available;

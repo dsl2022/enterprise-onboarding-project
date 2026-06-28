@@ -44,7 +44,8 @@ resource "aws_elasticache_replication_group" "this" {
   security_group_ids = [aws_security_group.redis.id]
 
   at_rest_encryption_enabled = true
-  transit_encryption_enabled = false # dev: SG-isolated; prod flips this + the client to rediss://
+  kms_key_id                 = var.kms_key_arn # project CMK, consistent with RDS storage/secret + logs
+  transit_encryption_enabled = false           # dev: SG-isolated; prod flips this + the client to rediss://
   apply_immediately          = true
 
   tags = { Name = "${var.name_prefix}-redis" }

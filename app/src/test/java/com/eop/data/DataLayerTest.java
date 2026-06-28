@@ -44,6 +44,8 @@ class DataLayerTest {
                 "SELECT schema_name FROM information_schema.schemata", String.class);
         assertThat(schemas).contains(
                 "request", "onboarding", "registry", "access",
-                "directory", "audit", "notify", "assistant");
+                "directory", "audit", "notify");
+        // `assistant` schema is deferred to its own track (CR-1416), so it must NOT exist yet.
+        assertThat(schemas).doesNotContain("assistant");
     }
 }

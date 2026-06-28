@@ -81,6 +81,7 @@ module "cache" {
   vpc_id                 = module.network.vpc_id
   private_subnet_ids     = module.network.private_subnet_ids
   task_security_group_id = module.edge.task_security_group_id
+  kms_key_arn            = module.platform.kms_key_arn
   multi_az               = var.multi_az
 
   depends_on = [module.network]
