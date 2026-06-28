@@ -231,6 +231,13 @@ Per-environment infra (between sessions, for cost):
 ```
 GitHub > Actions > infra-destroy > Run workflow > env=dev, confirm=destroy-dev  (approve `dev` env)
 ```
+This removes the whole main stack (VPC/NAT, ALB, both CloudFront distros, ECS, ECR images, secrets,
+issuer bucket incl. the app-published jwks.json). Two expected, harmless residues:
+- the **KMS CMK** is *scheduled* for deletion over AWS's mandatory 7-day window (can't be immediate),
+- the **SSM param `/eop/dev/app_image`** (written by app-deploy, not in TF state) survives — free; delete with:
+  ```bash
+  aws ssm delete-parameter --name /eop/dev/app_image
+  ```
 Bootstrap leftovers (only when retiring the project entirely — these are cheap/free to keep):
 
 If you created them via Terraform (preferred), just destroy each module — independent, any order:
