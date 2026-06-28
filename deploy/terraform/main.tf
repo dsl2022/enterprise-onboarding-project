@@ -75,4 +75,5 @@ module "service" {
   entra_app_client_id = module.entra.app_client_id
   app_url             = module.edge.app_url
   entra_client_secret = module.entra.client_secret_value
+  create_flow1_secret = true
 }

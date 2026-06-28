@@ -44,3 +44,9 @@ variable "entra_client_secret" {
   sensitive   = true
   default     = ""
 }
+
+variable "create_flow1_secret" {
+  description = "Write the Flow 1 client secret version. A static bool (the secret VALUE is unknown until apply, so it can't gate count)."
+  type        = bool
+  default     = false
+}

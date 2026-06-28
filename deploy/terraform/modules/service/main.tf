@@ -14,7 +14,7 @@ resource "aws_secretsmanager_secret" "flow1" {
 }
 
 resource "aws_secretsmanager_secret_version" "flow1" {
-  count         = var.entra_client_secret != "" ? 1 : 0
+  count         = var.create_flow1_secret ? 1 : 0
   secret_id     = aws_secretsmanager_secret.flow1.id
   secret_string = var.entra_client_secret
 }
