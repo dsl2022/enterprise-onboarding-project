@@ -95,6 +95,26 @@ data "aws_iam_policy_document" "tf_backend" {
     actions   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:DeleteItem"]
     resources = [aws_dynamodb_table.lock.arn]
   }
+  # `terraform plan` refreshes secret-version resources (e.g. the Flow 1 client secret),
+  # which calls GetSecretValue + kms:Decrypt — both excluded from the managed ReadOnlyAccess.
+  statement {
+    sid       = "ReadProjectSecrets"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = ["arn:aws:secretsmanager:*:${data.aws_caller_identity.current.account_id}:secret:eop-*"]
+  }
+  statement {
+    sid     = "DecryptForSecretRefresh"
+    effect  = "Allow"
+    actions = ["kms:Decrypt"]
+    # Only when used via Secrets Manager, so this read-only role can't decrypt arbitrarily.
+    resources = ["*"]
+    condition {
+      test     = "StringLike"
+      variable = "kms:ViaService"
+      values   = ["secretsmanager.*.amazonaws.com"]
+    }
+  }
 }
 
 resource "aws_iam_policy" "tf_backend" {
