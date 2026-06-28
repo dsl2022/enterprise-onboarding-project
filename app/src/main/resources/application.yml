@@ -26,6 +26,8 @@ wif:
   signing-secret-name: ${WIF_SIGNING_SECRET_NAME:}  # terraform output issuer_signing_secret_arn
   subject: ${WIF_SUBJECT:}                     # workload subject; must match the Entra federated credential
   region: ${AWS_REGION:}
+  tenant-id: ${ENTRA_TENANT_ID:}              # Flow 2 token-exchange authority
+  client-id: ${ENTRA_APP_CLIENT_ID:}          # client_id in the WIF exchange
 
 # ---- Phase 3+ placeholders (Flow 1 login), sourced from env, never committed ----
 # entra:
