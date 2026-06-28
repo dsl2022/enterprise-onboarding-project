@@ -58,6 +58,34 @@ module "entra" {
   create_client_secret = true
 }
 
+# Phase 2: data layer. RDS Postgres (pgvector via Flyway) + ElastiCache Redis (BFF session store),
+# both private and reachable only from the app task SG. depends_on the network for the same reason
+# edge does — they consume subnets but have no implicit edge to the VPC/subnets being ready.
+module "data" {
+  source = "./modules/data"
+
+  name_prefix            = local.name_prefix
+  vpc_id                 = module.network.vpc_id
+  private_subnet_ids     = module.network.private_subnet_ids
+  task_security_group_id = module.edge.task_security_group_id
+  kms_key_arn            = module.platform.kms_key_arn
+  multi_az               = var.multi_az
+
+  depends_on = [module.network]
+}
+
+module "cache" {
+  source = "./modules/cache"
+
+  name_prefix            = local.name_prefix
+  vpc_id                 = module.network.vpc_id
+  private_subnet_ids     = module.network.private_subnet_ids
+  task_security_group_id = module.edge.task_security_group_id
+  multi_az               = var.multi_az
+
+  depends_on = [module.network]
+}
+
 # Phase 4: ECS Fargate service. Task def + service appear once app_image is set
 # (delivered by app-deploy); cluster/roles/secret exist regardless.
 module "service" {
@@ -72,6 +100,15 @@ module "service" {
   log_group_name                = module.platform.log_group_name
   kms_key_arn                   = module.platform.kms_key_arn
   issuer_task_access_policy_arn = module.issuer.task_access_policy_arn
+
+  # Phase 2: data + cache wiring (RDS endpoint referenced here makes the service depend on the DB
+  # being `available` before tasks roll — TF orders RDS creation first, defusing the boot race).
+  db_host              = module.data.endpoint
+  db_port              = module.data.port
+  db_name              = module.data.db_name
+  db_master_secret_arn = module.data.master_user_secret_arn
+  redis_host           = module.cache.primary_endpoint
+  redis_port           = module.cache.port
 
   wif_issuer_host         = module.issuer.issuer_url
   wif_issuer_bucket       = module.issuer.issuer_bucket

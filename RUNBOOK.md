@@ -232,7 +232,9 @@ Per-environment infra (between sessions, for cost):
 GitHub > Actions > infra-destroy > Run workflow > env=dev, confirm=destroy-dev  (approve `dev` env)
 ```
 This removes the whole main stack (VPC/NAT, ALB, both CloudFront distros, ECS, ECR images, secrets,
-issuer bucket incl. the app-published jwks.json). Two expected, harmless residues:
+issuer bucket incl. the app-published jwks.json, **and the Phase 2 RDS Postgres + ElastiCache Redis**).
+The RDS-managed master secret deletes with the instance; `skip_final_snapshot`/no Redis final snapshot
+keep it clean. Two expected, harmless residues:
 - the **KMS CMK** is *scheduled* for deletion over AWS's mandatory 7-day window (can't be immediate),
 - the **SSM param `/eop/dev/app_image`** (written by app-deploy, not in TF state) survives — free; delete with:
   ```bash
@@ -262,3 +264,29 @@ aws s3 rb "s3://$STATE_BUCKET" --force
 # Azure: remove the CI app
 az ad app delete --id "$(az ad app list --display-name eop-github-ci --query '[0].appId' -o tsv)"
 ```
+
+## 7. Phase 2 data layer (RDS Postgres + Redis) — operating notes
+
+**No human consent or out-of-band step is required for Phase 2.** It is pure AWS infra + app wiring;
+the Entra/Graph consents are Phases 4–5. Deploy follows the normal spine:
+
+1. Merge the Phase 2 PR (CI green: `test` job = Testcontainers PG+pgvector & Redis + ArchUnit;
+   `terraform` fmt/validate; `app` image build; `openapi` unchanged).
+2. `app-deploy` builds+pushes the new image (data-profile code) and writes `/eop/dev/app_image`.
+3. Run **`infra`** (workflow_dispatch, env=dev) and approve. TF creates RDS first (waits ~10 min for
+   `available`), then ElastiCache, then rolls the ECS task def with `SPRING_PROFILES_ACTIVE=auth,data`.
+
+**Verify after apply:**
+```bash
+terraform -chdir=deploy/terraform output db_endpoint redis_endpoint
+# App logs should show Flyway applying V1__baseline (creates `vector` extension + per-module schemas):
+aws logs tail /eop-dev/app --since 15m --filter-pattern "Flyway"
+```
+- **First-boot race:** if a task starts before RDS is `available`, Flyway retries (≤10 min) and the 300s
+  health-check grace prevents the LB from killing it. It self-heals; no action needed.
+- **Cost:** `db.t4g.micro` + `cache.t4g.micro` ≈ a few $/day. Tear down between sessions via §6.
+- **Redis is a single node in dev = a session SPOF, not HA.** Losing it drops active BFF sessions
+  (users re-login). Set `-var multi_az=true` for a replica + automatic failover in prod (also flips the
+  client to `rediss://` when transit encryption is enabled).
+- **DB credentials** live only in the RDS-managed secret (CMK-encrypted); the task injects
+  `username`/`password` from it. Nothing to rotate manually in dev.

@@ -21,6 +21,22 @@ jobs:
       - name: Docker build (compiles + packages the app)
         run: docker build -t eop-app:ci .
 
+  # Phase 2: the correctness gate. Runs the full suite incl. Testcontainers (real Postgres+pgvector and
+  # Redis) on the runner's Docker. Kept separate from the `app` image build, which uses -DskipTests for a
+  # fast deterministic artifact (Testcontainers can't reliably reach Docker from inside `docker build`).
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - name: Maven verify (unit + Testcontainers + ArchUnit)
+        working-directory: app
+        run: mvn -B -e verify
+
   openapi:
     runs-on: ubuntu-latest
     steps:

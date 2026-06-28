@@ -43,8 +43,10 @@ resource "aws_iam_role_policy_attachment" "execution_managed" {
 
 data "aws_iam_policy_document" "exec_secrets" {
   statement {
+    # Flow 1 client secret + the RDS-managed DB master secret. Both are CMK-encrypted, so the
+    # kms:Decrypt grant below (project CMK) covers injection of both at task start.
     actions   = ["secretsmanager:GetSecretValue"]
-    resources = [aws_secretsmanager_secret.flow1.arn]
+    resources = [aws_secretsmanager_secret.flow1.arn, var.db_master_secret_arn]
   }
   statement {
     actions   = ["kms:Decrypt"]
@@ -88,7 +90,7 @@ resource "aws_ecs_task_definition" "app" {
       essential    = true
       portMappings = [{ containerPort = var.container_port, protocol = "tcp" }]
       environment = [
-        { name = "SPRING_PROFILES_ACTIVE", value = "auth" },
+        { name = "SPRING_PROFILES_ACTIVE", value = "auth,data" },
         { name = "WIF_ENABLED", value = "true" },
         { name = "WIF_ISSUER_HOST", value = var.wif_issuer_host },
         { name = "WIF_ISSUER_BUCKET", value = var.wif_issuer_bucket },
@@ -99,9 +101,18 @@ resource "aws_ecs_task_definition" "app" {
         { name = "ENTRA_APP_CLIENT_ID", value = var.entra_app_client_id },
         { name = "APP_BASE_URL", value = var.app_url },
         { name = "APP_REDIRECT_URI", value = "${var.app_url}/login/oauth2/code/entra" },
+        # Phase 2: persistence + session endpoints (non-secret coordinates only).
+        { name = "DB_HOST", value = var.db_host },
+        { name = "DB_PORT", value = tostring(var.db_port) },
+        { name = "DB_NAME", value = var.db_name },
+        { name = "REDIS_HOST", value = var.redis_host },
+        { name = "REDIS_PORT", value = tostring(var.redis_port) },
       ]
       secrets = [
         { name = "ENTRA_CLIENT_SECRET", valueFrom = aws_secretsmanager_secret.flow1.arn },
+        # DB creds pulled from the RDS-managed secret JSON by key (ECS supports the :json-key:: suffix).
+        { name = "DB_USERNAME", valueFrom = "${var.db_master_secret_arn}:username::" },
+        { name = "DB_PASSWORD", valueFrom = "${var.db_master_secret_arn}:password::" },
       ]
       logConfiguration = {
         logDriver = "awslogs"
@@ -135,5 +146,7 @@ resource "aws_ecs_service" "app" {
     container_port   = var.container_port
   }
 
-  health_check_grace_period_seconds = 90
+  # Generous grace: on the first Phase-2 roll RDS may still be finishing init when tasks start. The app
+  # retries the JDBC/Flyway connection on boot; this keeps the LB from killing tasks during that window.
+  health_check_grace_period_seconds = 300
 }
