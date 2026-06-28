@@ -65,3 +65,18 @@ use Docker. Revisit if we want fast non-Docker unit-test runs in CI (add `setup-
 version tags (e.g. `@v4`) for the first PR because SHAs can't be resolved offline.
 **Decision (deferred):** Before merging to `main` for real use, replace tag pins with commit SHAs.
 Tracked as a hardening task.
+
+## ADR-0010 — Issuer signing key lives only in Secrets Manager; the app owns it
+**Context:** The workload OIDC issuer needs an RSA keypair: the private key signs assertions, the public
+key is published as JWKS. Terraform can't compute the JWK modulus/exponent (`n`/`e`) in pure HCL, and
+generating the key in Terraform (`tls_private_key`) would persist the private key in remote state.
+**Decision:** Terraform provisions only the *hosting* (private S3 + CloudFront/OAC), the *discovery
+document* (deterministic — it only needs the CloudFront domain for `issuer`/`jwks_uri`), an **empty**
+Secrets Manager secret (CMK-encrypted), and the task IAM policy. **The app generates the RSA key on
+first boot** (Nimbus), stores the private JWK in Secrets Manager, and publishes `.well-known/jwks.json`
+to the bucket. The `kid` is the RFC-7638 thumbprint so JWKS and the assertion header always agree.
+**Consequences:** The private key never enters Terraform state or the repo. JWKS goes live at first app
+boot (Phase 4) — acceptable because Entra only fetches it at the Phase 5 exchange. Phase 2 verification
+is limited to the discovery doc over HTTPS. Issuer beans are gated by `wif.enabled` (off in Phase
+1/local/CI), so the app boots with no AWS dependency until Phase 4. CloudFront uses Managed-
+CachingDisabled so a rotated key's JWKS propagates immediately.

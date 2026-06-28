@@ -17,14 +17,20 @@ management:
       probes:
         enabled: true
 
-# ---- Placeholders wired in later phases (all sourced from env, never committed) ----
+# Workload OIDC issuer / WIF. Disabled by default so Phase 1 local + CI runs need no AWS.
+# Turned on (env vars) by the ECS task in Phase 4.
+wif:
+  enabled: ${WIF_ENABLED:false}
+  issuer-host: ${WIF_ISSUER_HOST:}            # https://<cloudfront-domain>  (terraform output issuer_url)
+  issuer-bucket: ${WIF_ISSUER_BUCKET:}        # terraform output issuer_bucket
+  signing-secret-name: ${WIF_SIGNING_SECRET_NAME:}  # terraform output issuer_signing_secret_arn
+  subject: ${WIF_SUBJECT:}                     # workload subject; must match the Entra federated credential
+  region: ${AWS_REGION:}
+
+# ---- Phase 3+ placeholders (Flow 1 login), sourced from env, never committed ----
 # entra:
-#   tenant-id:        ${ENTRA_TENANT_ID}              # 5b7b1ae8-bcc5-485f-ad46-cb099090670e
-#   app-client-id:    ${ENTRA_APP_CLIENT_ID}          # created in Phase 3
-# wif:
-#   issuer-host:      ${WIF_ISSUER_HOST}              # https://<cloudfront-domain>  (Phase 2)
-#   subject:          ${WIF_SUBJECT}                  # workload subject in the federated credential
-#   signing-secret-arn: ${WIF_SIGNING_SECRET_ARN}     # Secrets Manager ARN (Phase 2)
+#   tenant-id:     ${ENTRA_TENANT_ID}          # 5b7b1ae8-bcc5-485f-ad46-cb099090670e
+#   app-client-id: ${ENTRA_APP_CLIENT_ID}      # created in Phase 3
 logging:
   level:
     com.eop: INFO

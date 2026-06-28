@@ -31,9 +31,22 @@
       <artifactId>spring-boot-starter-actuator</artifactId>
     </dependency>
 
-    <!-- Phase 2+ will add: nimbus-jose-jwt (mint workload JWT / validate ID token),
-         spring-boot-starter-oauth2-client (Flow 1), aws-sdk secretsmanager.
-         Kept out of Phase 1 to keep the skeleton thin. -->
+    <!-- Phase 2: workload OIDC issuer signer + publisher.
+         nimbus-jose-jwt = RSA JWK generation + (Phase 5) RS256 signing.
+         AWS SDK = read/create the signing key in Secrets Manager, PUT jwks.json to S3. -->
+    <dependency>
+      <groupId>com.nimbusds</groupId>
+      <artifactId>nimbus-jose-jwt</artifactId>
+      <version>9.40</version>
+    </dependency>
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>secretsmanager</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>s3</artifactId>
+    </dependency>
 
     <dependency>
       <groupId>org.springframework.boot</groupId>
@@ -41,6 +54,18 @@
       <scope>test</scope>
     </dependency>
   </dependencies>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>software.amazon.awssdk</groupId>
+        <artifactId>bom</artifactId>
+        <version>2.28.16</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
 
   <build>
     <plugins>
