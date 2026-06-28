@@ -3,9 +3,10 @@
 Roles are **bundles of permissions**, derived from the Entra **app-roles (`roles`) claim** in the ID
 token — **not** the group-membership claim. App roles are app-scoped (only this app's roles appear, no
 filtering), have no overage cutoff, and don't bloat the cookie. Checks at the **service layer** are
-always **permission** checks (never role checks), plus **ABAC ownership** (owners act only on their own
-resources) and **separation of duties** (the requester of a request can never be its approver). The
-frontend only hides UI; the server is authoritative.
+always **permission** checks (never role checks) — granted if the permission appears in **any** of the
+principal's assigned app roles (union, most-permissive scope) — plus **ABAC ownership** (owners act only
+on their own resources) and **separation of duties** (the requester of a request can never be its
+approver). The frontend only hides UI; the server is authoritative.
 
 > **App roles vs groups (explicit separation):**
 > - **Entra app roles → portal RBAC** — what you can *do in the portal* (this matrix).
@@ -28,9 +29,18 @@ enterprise app (via `azuread_app_role_assignment` or the portal). Seed by **app-
 group membership. (The old role-*groups* Admins/Read-Only/Super-Admins are dropped; access-governance
 groups like `aws-prod-engineers` stay.)
 
-**Role precedence:** the `roles` claim is an array; if a user holds several, the effective role is the
-**most-privileged** (`SUPER_ADMIN` > `ADMIN` > `SSO_OPERATIONS` > `AUDITOR` > `APPLICATION_OWNER` >
-`READ_ONLY`). `/me.role` returns that single resolved role.
+**Multiple roles → union of permissions (not a single role).** The `roles` claim is an array and a user
+may hold several app roles. Because the roles are **not a strict hierarchy** (e.g. `APPLICATION_OWNER`
+and `AUDITOR` grant disjoint permissions), authorization is the **union** of every held role's
+permissions — a permission is allowed if **any** assigned role grants it. **Scope resolves to the most
+permissive:** when several held roles grant the same permission at different scopes, an unscoped `✔`
+from any role overrides `✔(own)`; `✔(own)` applies only when **every** granting role is `✔(own)`.
+(Example: `APPLICATION_OWNER`+`AUDITOR` → `app.read` becomes unscoped `✔` and they keep `app.create`
+from the owner role; picking one "winning" role would drop one of those.)
+
+A single **display role** is still computed for UI only — the most-privileged held role
+(`SUPER_ADMIN` > `ADMIN` > `SSO_OPERATIONS` > `AUDITOR` > `APPLICATION_OWNER` > `READ_ONLY`) — returned
+as `/me.role` for the header/banner. **It is never the basis for an access decision.**
 
 ## Permission matrix
 ✔ = allowed · ✔(own) = only resources the principal owns · — = denied. `SUPER_ADMIN` = everything,

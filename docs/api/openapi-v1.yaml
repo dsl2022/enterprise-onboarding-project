@@ -408,7 +408,11 @@ components:
         email: { type: string }
         role:
           allOf: [ { $ref: "#/components/schemas/Role" } ]
-          description: "Resolved from the Entra app-roles (`roles`) claim; most-privileged wins if multiple"
+          description: "Display role only (most-privileged of the held app roles). NOT the basis for authorization — the server checks permissions as the union of all assigned roles."
+        roles:
+          type: array
+          items: { $ref: "#/components/schemas/Role" }
+          description: "All app roles held by the principal (the `roles` claim); authorization is the union of these."
         group: { type: string, nullable: true, description: "Informational access-governance/team group; NOT the RBAC source" }
         isSuperAdmin: { type: boolean }
         impersonating:
@@ -422,6 +426,7 @@ components:
         v1 ships role-level impersonation (set `role`). The optional `user` is reserved for future
         user-level impersonation so adding it later is not a contract change; ignored in v1.
       type: object
+      required: [role]
       properties:
         role: { $ref: "#/components/schemas/Role" }
         user: { type: string, nullable: true, description: "Reserved (future user-level impersonation); ignored in v1" }
