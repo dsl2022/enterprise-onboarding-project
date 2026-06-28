@@ -39,3 +39,29 @@ docker build -t eop-app .
 docker run --rm -p 8080:8080 eop-app
 curl localhost:8080/healthz
 ```
+
+## Demo / proof (v0 done)
+App URL: `https://d3919zy3gh57yu.cloudfront.net` (front-door CloudFront → ALB → Fargate).
+Workload OIDC issuer: `https://d1an4lciob7kqw.cloudfront.net` (S3 + CloudFront).
+
+1. **Sign in with Microsoft** → Entra OIDC (Auth Code + PKCE), server-side session. `/auth/me` shows the user.
+2. **List my groups** → `/api/graph/groups` returns real Graph groups, e.g.:
+   ```json
+   { "count": 3, "groups": [
+     { "displayName": "App-Owners" }, { "displayName": "Auditors" }, { "displayName": "SSO-Operations" } ] }
+   ```
+
+The cross-cloud chain, from CloudWatch (`/eop-dev/app`) — **no stored credential, no token material logged**:
+```
+IssuerKeyService   Generated signing key kid=iqDhix…, stored in Secrets Manager
+IssuerPublisher    Published JWKS to s3://eop-dev-issuer-…/.well-known/jwks.json (served via CloudFront)
+WifAssertionService WIF exchange OK: obtained Graph app-only token (expires 3599s)
+GraphService       Graph /groups returned 3 groups across 1 page
+```
+The AWS app authenticated to Entra purely by signing a JWT with its own issuer key (public half in the
+published JWKS) — Entra matched it against the federated identity credential (issuer + subject +
+audience). The only stored secret is the Flow 1 login client secret; **Flow 2 uses none**.
+
+Definition of done: ✅ Flow 1 SSO · ✅ Flow 2 Graph via WIF (no stored credential) · ✅ RP-initiated
+logout · ✅ all Terraform via CI (PR → plan → `dev` approval → apply), never locally · ✅ `infra-destroy`
+tears everything down (see RUNBOOK §6).
