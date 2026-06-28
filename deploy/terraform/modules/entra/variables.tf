@@ -14,9 +14,15 @@ variable "workload_subject" {
 }
 
 variable "redirect_uris" {
-  description = "Flow 1 (login) web redirect URIs. Empty in Phase 3; set to the ALB callback in Phase 4."
+  description = "Flow 1 (login) web redirect URIs. Empty in Phase 3; set to the app callback in Phase 4."
   type        = list(string)
   default     = []
+}
+
+variable "create_client_secret" {
+  description = "Create the Flow 1 confidential-client secret (Phase 4). Off in Phase 3."
+  type        = bool
+  default     = false
 }
 
 variable "graph_app_id" {

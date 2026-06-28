@@ -1,47 +1,44 @@
 package com.eop.auth;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.view.RedirectView;
 
 /**
- * Flow 1 (user SSO) — BFF confidential OIDC client against Microsoft Entra.
+ * Flow 1 (user SSO) endpoints. The Auth Code + PKCE exchange, ID-token validation, and session are
+ * handled by Spring Security's OAuth2 client (see {@link SecurityConfig}); these endpoints are the
+ * thin BFF surface the UI talks to. Tokens never leave the server.
  *
- * <p>Phase 1 ships honest stubs so the contract and routes exist; the real Auth Code + PKCE flow,
- * ID-token validation, and server-side session land in Phase 4. Tokens will never reach the browser.
+ * <p>{@code /auth/logout} is handled by the security filter chain (GET → clear session → redirect).
  */
 @RestController
-@RequestMapping("/auth")
 public class AuthController {
 
-    private static final ResponseEntity<Map<String, Object>> NOT_YET = ResponseEntity
-            .status(HttpStatus.NOT_IMPLEMENTED)
-            .body(Map.of("error", "not_implemented", "flow", "Flow 1 (SSO) — implemented in Phase 4"));
-
-    /** Redirects to Entra /authorize (Auth Code + PKCE, state). */
-    @GetMapping("/login")
-    public ResponseEntity<Map<String, Object>> login() {
-        return NOT_YET;
+    /** Kicks off login by handing to Spring's authorization-request endpoint for the `entra` client. */
+    @GetMapping("/auth/login")
+    public RedirectView login() {
+        return new RedirectView("/oauth2/authorization/entra");
     }
 
-    /** Entra redirect target: validate state, exchange code (+PKCE), validate ID token, start session. */
-    @GetMapping("/callback")
-    public ResponseEntity<Map<String, Object>> callback() {
-        return NOT_YET;
-    }
-
-    /** Clears the server-side session and the cookie. */
-    @GetMapping("/logout")
-    public ResponseEntity<Map<String, Object>> logout() {
-        return NOT_YET;
-    }
-
-    /** Returns the signed-in user's basic claims — the Flow 1 proof. */
-    @GetMapping("/me")
-    public ResponseEntity<Map<String, Object>> me() {
-        return NOT_YET;
+    /** Flow 1 proof: the signed-in user's basic claims (or 401 if no session). */
+    @GetMapping("/auth/me")
+    public ResponseEntity<Map<String, Object>> me(@AuthenticationPrincipal OidcUser user) {
+        if (user == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("authenticated", false));
+        }
+        var claims = new LinkedHashMap<String, Object>();
+        claims.put("authenticated", true);
+        claims.put("name", user.getFullName());
+        claims.put("email", user.getEmail() != null ? user.getEmail() : user.getPreferredUsername());
+        claims.put("sub", user.getSubject());
+        claims.put("tenant", user.getClaimAsString("tid"));
+        return ResponseEntity.ok(claims);
     }
 }

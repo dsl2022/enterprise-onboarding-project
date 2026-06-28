@@ -45,3 +45,13 @@ output "workload_subject" {
   description = "WIF subject — set as the app's WIF_SUBJECT env in Phase 4."
   value       = module.entra.workload_subject
 }
+
+# ---- Phase 4: app front door ----
+output "app_url" {
+  description = "Public HTTPS URL of the app (CloudFront). Sign in here."
+  value       = module.edge.app_url
+}
+
+output "ecs_cluster_name" {
+  value = module.service.cluster_name
+}

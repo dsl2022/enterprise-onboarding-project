@@ -24,14 +24,56 @@ module "issuer" {
   kms_key_arn = module.platform.kms_key_arn
 }
 
-# Phase 3: Entra app registration + federated identity credential pointing at the
-# Phase-2 issuer URL (same state — no manual copy). Graph Group.Read.All is declared
-# here; a Global Admin grants admin consent out-of-band (RUNBOOK §4).
+# Phase 4: network (VPC/2AZ/single NAT).
+module "network" {
+  source      = "./modules/network"
+  name_prefix = local.name_prefix
+}
+
+# Phase 4: edge (ALB + app CloudFront + SGs). Produces the public HTTPS app URL.
+# Separate from compute so module.entra can consume app_url without a dependency cycle.
+module "edge" {
+  source            = "./modules/edge"
+  name_prefix       = local.name_prefix
+  vpc_id            = module.network.vpc_id
+  public_subnet_ids = module.network.public_subnet_ids
+}
+
+# Phase 3+4: Entra app registration + federated credential + (Phase 4) Flow 1 redirect
+# URI and client secret. issuer_url wired from Phase 2; redirect from the edge app URL.
 module "entra" {
   source = "./modules/entra"
 
-  app_display_name = "${local.name_prefix}-app"
-  issuer_url       = module.issuer.issuer_url
-  workload_subject = local.workload_subject
-  # redirect_uris set in Phase 4 once the ALB DNS exists.
+  app_display_name     = "${local.name_prefix}-app"
+  issuer_url           = module.issuer.issuer_url
+  workload_subject     = local.workload_subject
+  redirect_uris        = ["${module.edge.app_url}/login/oauth2/code/entra"]
+  create_client_secret = true
+}
+
+# Phase 4: ECS Fargate service. Task def + service appear once app_image is set
+# (delivered by app-deploy); cluster/roles/secret exist regardless.
+module "service" {
+  source = "./modules/service"
+
+  name_prefix                   = local.name_prefix
+  region                        = var.region
+  app_image                     = var.app_image
+  private_subnet_ids            = module.network.private_subnet_ids
+  task_security_group_id        = module.edge.task_security_group_id
+  target_group_arn              = module.edge.target_group_arn
+  log_group_name                = module.platform.log_group_name
+  kms_key_arn                   = module.platform.kms_key_arn
+  issuer_task_access_policy_arn = module.issuer.task_access_policy_arn
+
+  wif_issuer_host         = module.issuer.issuer_url
+  wif_issuer_bucket       = module.issuer.issuer_bucket
+  wif_signing_secret_name = module.issuer.signing_secret_name
+  workload_subject        = local.workload_subject
+
+  entra_tenant_id     = var.entra_tenant_id
+  entra_app_client_id = module.entra.app_client_id
+  app_url             = module.edge.app_url
+  entra_client_secret = module.entra.client_secret_value
+  create_flow1_secret = true
 }
