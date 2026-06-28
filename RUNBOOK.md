@@ -11,6 +11,13 @@ Nothing here stores a static cloud credential. Run the sections in order.
 5. [Phase 3 admin consent](#4-phase-3-admin-consent-human-global-admin) (after Terraform creates the Entra app).
 6. [Key rotation](#5-issuer-signing-key-rotation-phase-2) / [Teardown](#6-teardown).
 
+> **Automated path (preferred):** sections **1–3** are now Terraform. Run
+> [`deploy/terraform/bootstrap`](deploy/terraform/bootstrap) (AWS state backend +
+> OIDC roles + GitHub secrets/env) and, at Phase 3,
+> [`deploy/terraform/bootstrap-azure`](deploy/terraform/bootstrap-azure) (Entra CI
+> app). Each is a self-contained, local-state module that destroys on its own — see
+> their READMEs. The manual CLI below is kept as reference / a no-Terraform fallback.
+
 Shared values used below:
 ```bash
 export GH_OWNER=dsl2022
@@ -161,10 +168,10 @@ addfic gh-dev "${SUB_REPO}:environment:${ENVNAME}"
 addfic gh-main "${SUB_REPO}:ref:refs/heads/main"
 
 # Grant the CI app rights to manage app registrations it owns (Microsoft Graph app permission
-# Application.ReadWrite.OwnedBy = 18a4783c-866b-4cc7-a460-3d0e455a5ff2), then admin-consent.
+# Application.ReadWrite.OwnedBy = 18a4783c-866b-4cc7-a460-3d5e5662c884), then admin-consent.
 az ad app permission add --id "$APP_ID" \
   --api 00000003-0000-0000-c000-000000000000 \
-  --api-permissions 18a4783c-866b-4cc7-a460-3d0e455a5ff2=Role
+  --api-permissions 18a4783c-866b-4cc7-a460-3d5e5662c884=Role
 az ad app permission admin-consent --id "$APP_ID"
 echo "AZURE_TENANT_ID=$TENANT_ID"
 ```
@@ -212,6 +219,15 @@ Per-environment infra (between sessions, for cost):
 GitHub > Actions > infra-destroy > Run workflow > env=dev, confirm=destroy-dev  (approve `dev` env)
 ```
 Bootstrap leftovers (only when retiring the project entirely — these are cheap/free to keep):
+
+If you created them via Terraform (preferred), just destroy each module — independent, any order:
+```bash
+terraform -chdir=deploy/terraform/bootstrap-azure destroy   # Entra CI app + AZURE_* secrets (if applied)
+terraform -chdir=deploy/terraform/bootstrap destroy         # state bucket, lock table, roles, GH secrets/env
+# Note: the shared GitHub OIDC provider is referenced, not owned — destroy leaves it in place.
+```
+
+Manual fallback (only if you used the CLI path / lost the bootstrap local state):
 ```bash
 # AWS: roles, OIDC provider, lock table, then the versioned state bucket
 for r in eop-gha-plan eop-gha-apply eop-gha-deploy; do

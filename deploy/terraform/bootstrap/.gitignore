@@ -1,0 +1,7 @@
+# Local state for this self-contained bootstrap layer. Holds role/resource ids
+# (no secrets), but keep it out of the repo. Back it up out-of-band if you want a
+# clean `terraform destroy` later; otherwise fall back to manual teardown.
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.tfstate.lock.info
