@@ -1,10 +1,10 @@
 openapi: 3.0.3
 info:
   title: Enterprise Onboarding Portal API
-  version: 1.0.0-draft
+  version: 1.0.0
   description: >
     v1 backend contract for the request → approve → provision → audit → notify portal.
-    DRAFT for review — freeze before module code (Phase 1). BFF pattern: auth via the
+    FROZEN (Phase 1) — change only via a new change request (docs/change-requests/). BFF pattern: auth via the
     server-side session cookie (tokens never reach the browser). Every mutation emits a
     domain event. Errors are RFC-7807 problem+json. Lists are cursor-paginated.
 

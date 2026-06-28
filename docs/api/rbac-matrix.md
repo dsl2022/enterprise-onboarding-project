@@ -1,4 +1,4 @@
-# RBAC — role → permission matrix + state machines (v1, draft for freeze)
+# RBAC — role → permission matrix + state machines (v1, FROZEN — change via a new change request)
 
 Roles are **bundles of permissions**, derived from the Entra **app-roles (`roles`) claim** in the ID
 token — **not** the group-membership claim. App roles are app-scoped (only this app's roles appear, no
