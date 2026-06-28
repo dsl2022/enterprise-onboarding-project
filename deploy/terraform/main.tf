@@ -37,6 +37,10 @@ module "edge" {
   name_prefix       = local.name_prefix
   vpc_id            = module.network.vpc_id
   public_subnet_ids = module.network.public_subnet_ids
+
+  # An internet-facing ALB requires the VPC's internet gateway to exist first. Subnet
+  # references alone don't create that edge, so depend on the whole network module.
+  depends_on = [module.network]
 }
 
 # Phase 3+4: Entra app registration + federated credential + (Phase 4) Flow 1 redirect
