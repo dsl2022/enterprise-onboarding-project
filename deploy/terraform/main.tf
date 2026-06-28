@@ -56,6 +56,10 @@ module "entra" {
     "${module.edge.app_url}/",                        # OIDC post-logout redirect target
   ]
   create_client_secret = true
+
+  # Phase 3a: declare the 6 portal app roles (always) + seed test-user assignments (from tfvars).
+  require_app_role_assignment = var.entra_require_app_role_assignment
+  app_role_assignments        = var.entra_app_role_assignments
 }
 
 # Phase 2: data layer. RDS Postgres (pgvector via Flyway) + ElastiCache Redis (BFF session store),

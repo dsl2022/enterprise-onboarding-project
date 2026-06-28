@@ -5,6 +5,9 @@ server:
 spring:
   application:
     name: enterprise-onboarding-app
+  mvc:
+    problemdetails:
+      enabled: true   # framework exceptions (401/404/422 …) render as RFC-7807 problem+json too
 
 # External base URL (CloudFront). Used for the OIDC post-logout redirect target.
 app:

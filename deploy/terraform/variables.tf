@@ -31,3 +31,18 @@ variable "multi_az" {
   type        = bool
   default     = false
 }
+
+variable "entra_require_app_role_assignment" {
+  description = "Phase 3a: require an app-role assignment to sign in (interactive Flow-1 only). Default false; flip true AFTER assigning roles to every login or it breaks them."
+  type        = bool
+  default     = false
+}
+
+variable "entra_app_role_assignments" {
+  description = "Phase 3a: portal app-role assignments for test users. Provided at apply via envs/dev.tfvars (objectIds aren't secret)."
+  type = list(object({
+    role                = string
+    principal_object_id = string
+  }))
+  default = []
+}

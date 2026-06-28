@@ -64,7 +64,12 @@ validate` with Flyway owning schema.
 - ADR-0012 gains the rotation-vs-injection Consequences line (item 1) + the Redis-CMK + 7-schema notes.
 - `assistant` schema dropped from `V1__baseline.sql` (and `DataLayerTest` now asserts it is absent).
 
-**Deferred items remain Open**, each resolving in its noted phase — record the implementing commit/PR
-here as they land: item 3 at the Phase 2 first apply (Flyway/boot log shows `CREATE EXTENSION vector`
-on real RDS; RUNBOOK §7 verify step); items 1–2 at Phase 6 (least-privilege/locked-down DB roles);
-items 4–5 at prod hardening / Phase 10 (Redis transit encryption + AUTH; JSON session serialization).
+**Item 3 — RESOLVED at first apply (2026-06-28).** PR #13 merged + applied; the app booted and login
+worked, which requires Flyway `V1__baseline.sql` to have applied successfully on real RDS PG16 (a failed
+migration aborts startup) — so `CREATE EXTENSION vector` + the 7 module schemas are confirmed on RDS.
+Live restart of the ECS tasks + same-tab refresh stayed authenticated, proving the Redis-backed BFF
+session survives task lifecycle.
+
+**Deferred items remain Open**, each resolving in its noted phase: items 1–2 at Phase 6
+(least-privilege/locked-down DB roles); items 4–5 at prod hardening / Phase 10 (Redis transit
+encryption + AUTH; JSON session serialization).

@@ -21,3 +21,8 @@ output "client_secret_value" {
   value       = var.create_client_secret ? azuread_application_password.flow1[0].value : null
   sensitive   = true
 }
+
+output "app_role_ids" {
+  description = "Portal role value -> Entra app-role id (stable). For verifying/forming app-role assignments."
+  value       = { for k, v in local.portal_app_roles : k => v.id }
+}

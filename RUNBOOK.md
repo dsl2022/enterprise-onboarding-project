@@ -290,3 +290,34 @@ aws logs tail /eop-dev/app --since 15m --filter-pattern "Flyway"
   client to `rediss://` when transit encryption is enabled).
 - **DB credentials** live only in the RDS-managed secret (CMK-encrypted); the task injects
   `username`/`password` from it. Nothing to rotate manually in dev.
+
+## 8. Phase 3a — portal app roles + per-role login (RBAC seed)
+
+Phase 3a declares the **6 portal app roles** on `eop-dev-app` and seeds **app-role assignments** for
+test users. No Graph consent is needed (app roles are app-local, not Graph permissions). Order matters
+to avoid locking anyone out.
+
+**1. Get each test user's object id** (objectIds aren't secret):
+```bash
+az ad user show --id testuser@job2019tmmgmail.onmicrosoft.com --query id -o tsv
+az ad user show --id job2019tmm@gmail.com --query id -o tsv   # your GA login — must also get a role
+```
+
+**2. Fill `deploy/terraform/envs/dev.tfvars`** → `entra_app_role_assignments` (one row per role; repeat a
+user across two rows for a multi-role union demo). Assign **every account that signs in interactively**,
+including your GA account, or `require=true` (step 4) will block its login.
+
+**3. Apply with assignments, `require` still false** (merge the 3a PR → run `infra`, env=dev, approve):
+```bash
+terraform -chdir=deploy/terraform output app_role_ids   # verify the 6 roles exist with stable ids
+```
+Sign in as each test user and hit `/api/v1/me` — confirm `roles[]`, the display `role`, and (for the
+Super Admin) `POST /api/v1/impersonation {"role":"READ_ONLY"}` then `GET /me` shows the reduced view +
+`impersonating.role`, and `DELETE /impersonation` restores it.
+
+**4. Flip enforcement on** (only after step 3 verifies every login has a role): set
+`entra_require_app_role_assignment = true` in `dev.tfvars`, re-run `infra` + approve. Now only assigned
+users can sign in. (Flow-2 WIF/Graph is app-only and unaffected throughout.)
+
+**Rollback if a login breaks:** set `entra_require_app_role_assignment = false`, re-apply — sign-in opens
+back up immediately while you fix the missing assignment.

@@ -134,3 +134,35 @@ long-lived task fails on its next *new* pooled connection (Hikari `maxLifetime` 
 just on restart. Harmless in dev (sessions < 7 days, disposable); the prod fix is a least-privilege,
 app-managed app role (or IAM DB auth, or re-reading the secret on rotation), tracked with the
 master-user/locked-down-role work in Phase 6.
+
+## ADR-0013 — Phase 3a: portal RBAC (app-roles union) + identity/impersonation
+**Context:** v1 needs real per-role authorization from Entra, separation of duties, and audited
+impersonation — built against the frozen `/me` + `/impersonation` contract and the RBAC matrix. The
+request *engine* is a separate, larger unit (3b); 3a isolates the RBAC spine and the login-affecting
+Entra change so a forgotten assignment can't be entangled with engine logic.
+**Decision:**
+- **RBAC from the app-roles (`roles`) claim, not groups.** Six `PortalRole`s; the frozen matrix is
+  transcribed as data (`RolePermissions`). Authorization is a **permission** check at the service layer
+  via a programmatic `AuthorizationService.require(principal, permission[, resource])` — chosen over
+  `@PreAuthorize` because ABAC ownership + SoD need the loaded resource. **Union** of all effective
+  roles; **most-permissive scope** (`ALL` beats `OWN`; `OWN` only if every granting role is `OWN`) per
+  CR-1056. `/me.role` is display-only (most-privileged), never an auth input.
+- **Impersonation** overlay lives in the **Redis-backed session** (Phase 2 reuse). The `impersonate`
+  permission is checked against the **real** roles (not the effective overlay), so an active
+  impersonation can't self-escalate. While impersonating: **permissions** come from the impersonated
+  role; **identity/SoD/ABAC/audit** stay the real principal (the laundering guard — proven by test:
+  submit-as-self → impersonate ops → approve is blocked). `/me.roles` returns the **effective** set (not
+  real) so the UI gates to the reduced view; real identity is conveyed by `isSuperAdmin` +
+  `impersonating.role`. `/me.group` is null in v1 (groups are access governance, read later).
+- **Entra:** the 6 app roles are declared on `eop-dev-app` with **fixed UUID ids** (ours to declare —
+  unlike Graph GUIDs which are resolved live; a changed id orphans assignments), assigned to **users**.
+  `app_role_assignment_required` defaults **false**; it is flipped true only AFTER every interactive
+  login holds a role (else sign-in breaks). Flow-2 WIF is app-only and unaffected. The app also handles
+  the zero-roles edge defensively (empty union, `READ_ONLY` display floor).
+- **Outbox → shared `messaging` schema (not `request`)** so Phase 4/5/6 emitters and the Phase 6 relay
+  don't cross-access the `request` schema (preserving the ArchUnit boundary); written via a shared
+  `platform` `OutboxWriter`. *Decided here; implemented in 3b where the engine + outbox land.*
+**Consequences:** No DB tables in 3a (impersonation is session state) → no migration; additive Entra
+(6 roles + assignments). Module graph stays acyclic (`platform`/`auth`/`request` → `authz`; never the
+reverse) — enforced by ArchUnit. RFC-7807 + correlation ids formalized in `platform`. Real per-role
+logins + impersonation demo end-to-end once the app-role assignments are applied (RUNBOOK §8).
