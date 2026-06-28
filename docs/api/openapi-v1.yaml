@@ -1,0 +1,584 @@
+openapi: 3.0.3
+info:
+  title: Enterprise Onboarding Portal API
+  version: 1.0.0-draft
+  description: >
+    v1 backend contract for the request → approve → provision → audit → notify portal.
+    DRAFT for review — freeze before module code (Phase 1). BFF pattern: auth via the
+    server-side session cookie (tokens never reach the browser). Every mutation emits a
+    domain event. POSTs that create are idempotent via Idempotency-Key. Lists are
+    cursor-paginated. PATCH uses optimistic concurrency via ETag/If-Match. Errors are
+    RFC-7807 problem+json.
+
+servers:
+  - url: /api/v1
+
+security:
+  - cookieAuth: []
+
+tags:
+  - name: identity
+  - name: applications
+  - name: access
+  - name: review
+  - name: teams
+  - name: audit
+  - name: notifications
+  - name: assistant
+
+paths:
+  /me:
+    get:
+      tags: [identity]
+      summary: Current principal, effective role, and impersonation state
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/Me" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /impersonation:
+    post:
+      tags: [identity]
+      summary: Begin impersonating a role (SUPER_ADMIN only; all actions still audited as Super Admin)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ImpersonationRequest" } } }
+      responses:
+        "200": { description: Impersonation active, content: { application/json: { schema: { $ref: "#/components/schemas/Me" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    delete:
+      tags: [identity]
+      summary: Stop impersonating
+      responses:
+        "204": { description: Stopped }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /applications:
+    get:
+      tags: [applications]
+      summary: List applications (role-scoped; owners see their own)
+      parameters:
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/OnboardingStatus" } }
+        - { name: owner, in: query, schema: { type: string } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ApplicationPage" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [applications]
+      summary: Create an onboarding request (DRAFT)
+      parameters: [ { $ref: "#/components/parameters/IdempotencyKey" } ]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ApplicationCreate" } } }
+      responses:
+        "201": { description: Created, headers: { ETag: { $ref: "#/components/headers/ETag" } }, content: { application/json: { schema: { $ref: "#/components/schemas/Application" } } } }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /applications/{id}:
+    parameters: [ { $ref: "#/components/parameters/Id" } ]
+    get:
+      tags: [applications]
+      responses:
+        "200": { description: OK, headers: { ETag: { $ref: "#/components/headers/ETag" } }, content: { application/json: { schema: { $ref: "#/components/schemas/Application" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [applications]
+      summary: Update a DRAFT/CHANGES_REQUESTED application (optimistic concurrency)
+      parameters: [ { $ref: "#/components/parameters/IfMatch" } ]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ApplicationPatch" } } }
+      responses:
+        "200": { description: OK, headers: { ETag: { $ref: "#/components/headers/ETag" } }, content: { application/json: { schema: { $ref: "#/components/schemas/Application" } } } }
+        "412": { $ref: "#/components/responses/PreconditionFailed" }
+
+  /applications/{id}/submit:
+    parameters: [ { $ref: "#/components/parameters/Id" } ]
+    post:
+      tags: [applications]
+      summary: Submit (DRAFT → SUBMITTED)
+      parameters: [ { $ref: "#/components/parameters/IdempotencyKey" } ]
+      responses:
+        "200": { description: Submitted, content: { application/json: { schema: { $ref: "#/components/schemas/Application" } } } }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /applications/{id}/decision:
+    parameters: [ { $ref: "#/components/parameters/Id" } ]
+    post:
+      tags: [applications]
+      summary: Approver decision (APPROVE | REJECT | REQUEST_CHANGES). Separation of duties — requester != approver.
+      parameters: [ { $ref: "#/components/parameters/IdempotencyKey" } ]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DecisionBody" } } }
+      responses:
+        "200": { description: Decision applied, content: { application/json: { schema: { $ref: "#/components/schemas/Application" } } } }
+        "403": { description: "Not an approver, or separation-of-duties violation", content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /applications/{id}/timeline:
+    parameters: [ { $ref: "#/components/parameters/Id" } ]
+    get:
+      tags: [applications]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/TimelineEntry" } } } } }
+
+  /catalog:
+    get:
+      tags: [access]
+      parameters:
+        - { name: type, in: query, schema: { $ref: "#/components/schemas/ResourceType" } }
+        - { name: risk, in: query, schema: { $ref: "#/components/schemas/Risk" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/CatalogPage" } } } }
+
+  /catalog/{id}:
+    parameters: [ { $ref: "#/components/parameters/Id" } ]
+    get:
+      tags: [access]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/CatalogResource" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /access-requests:
+    get:
+      tags: [access]
+      parameters:
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/AccessStatus" } }
+        - { name: type, in: query, schema: { $ref: "#/components/schemas/AccessRequestKind" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AccessRequestPage" } } } }
+    post:
+      tags: [access]
+      summary: Create an access request (SUBMITTED)
+      parameters: [ { $ref: "#/components/parameters/IdempotencyKey" } ]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AccessRequestCreate" } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/AccessRequest" } } } }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /access-requests/{id}:
+    parameters: [ { $ref: "#/components/parameters/Id" } ]
+    get:
+      tags: [access]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AccessRequest" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /access-requests/{id}/decision:
+    parameters: [ { $ref: "#/components/parameters/Id" } ]
+    post:
+      tags: [access]
+      summary: Approver decision. Separation of duties enforced.
+      parameters: [ { $ref: "#/components/parameters/IdempotencyKey" } ]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DecisionBody" } } }
+      responses:
+        "200": { description: Decision applied, content: { application/json: { schema: { $ref: "#/components/schemas/AccessRequest" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /my-access:
+    get:
+      tags: [access]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/MyAccessItem" } } } } }
+
+  /my-access/{resourceId}/removal:
+    parameters: [ { name: resourceId, in: path, required: true, schema: { type: string } } ]
+    post:
+      tags: [access]
+      summary: Request removal of a granted resource (creates an access-request kind=removal)
+      parameters: [ { $ref: "#/components/parameters/IdempotencyKey" } ]
+      responses:
+        "201": { description: Removal request created, content: { application/json: { schema: { $ref: "#/components/schemas/AccessRequest" } } } }
+
+  /review-queue:
+    get:
+      tags: [review]
+      summary: Unified queue of items UNDER_REVIEW across both request types
+      parameters:
+        - { name: type, in: query, schema: { type: string, enum: [onboarding, access] } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ReviewQueuePage" } } } }
+
+  /teams:
+    get:
+      tags: [teams]
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Team" } } } } } }
+    post:
+      tags: [teams]
+      parameters: [ { $ref: "#/components/parameters/IdempotencyKey" } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/TeamCreate" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Team" } } } } }
+
+  /teams/{id}/members:
+    parameters: [ { $ref: "#/components/parameters/Id" } ]
+    get:
+      tags: [teams]
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/TeamMember" } } } } } }
+    post:
+      tags: [teams]
+      parameters: [ { $ref: "#/components/parameters/IdempotencyKey" } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/TeamMemberAdd" } } } }
+      responses: { "201": { description: Added, content: { application/json: { schema: { $ref: "#/components/schemas/TeamMember" } } } } }
+
+  /teams/{id}/members/{userId}:
+    parameters:
+      - { $ref: "#/components/parameters/Id" }
+      - { name: userId, in: path, required: true, schema: { type: string } }
+    delete:
+      tags: [teams]
+      summary: Soft-delete a member (audited)
+      responses: { "204": { description: Removed } }
+
+  /audit:
+    get:
+      tags: [audit]
+      summary: Query the hash-chained audit log
+      parameters:
+        - { name: actor, in: query, schema: { type: string } }
+        - { name: type, in: query, schema: { type: string } }
+        - { name: resource, in: query, schema: { type: string } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AuditPage" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /notifications:
+    get:
+      tags: [notifications]
+      parameters: [ { $ref: "#/components/parameters/Cursor" }, { $ref: "#/components/parameters/Limit" } ]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/NotificationFeed" } } } } }
+
+  /notifications/{id}/read:
+    parameters: [ { $ref: "#/components/parameters/Id" } ]
+    post:
+      tags: [notifications]
+      responses: { "204": { description: Marked read } }
+
+  /notifications/read-all:
+    post:
+      tags: [notifications]
+      responses: { "204": { description: All marked read } }
+
+  /assistant/chat:
+    post:
+      tags: [assistant]
+      summary: "Wizard assistant (STUBBED in v1 core; full RAG/tools in a later track)"
+      parameters: [ { $ref: "#/components/parameters/IdempotencyKey" } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/AssistantChatRequest" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AssistantChatResponse" } } } }
+        "501": { description: Not implemented (assistant track deferred), content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
+
+  /assistant/actions/{id}/approve:
+    parameters: [ { $ref: "#/components/parameters/Id" } ]
+    post:
+      tags: [assistant]
+      summary: "Approve a proposed AI write-action (human-in-the-loop). STUBBED in v1 core."
+      responses:
+        "202": { description: Accepted }
+        "501": { description: Not implemented }
+
+components:
+  securitySchemes:
+    cookieAuth: { type: apiKey, in: cookie, name: SESSION }
+
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string } }
+    Cursor: { name: cursor, in: query, required: false, schema: { type: string }, description: Opaque pagination cursor }
+    Limit: { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string }
+      description: Client-generated key; replays return the original result, never a duplicate side effect.
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      schema: { type: string }
+      description: ETag from a prior GET; rejects the write with 412 if the resource changed.
+
+  headers:
+    ETag: { description: Opaque version token for optimistic concurrency, schema: { type: string } }
+
+  responses:
+    Unauthorized: { description: No/invalid session, content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
+    Forbidden: { description: Insufficient permission / SoD / ownership, content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
+    NotFound: { description: Not found, content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
+    Conflict: { description: State or idempotency conflict, content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
+    PreconditionFailed: { description: ETag mismatch, content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
+    Unprocessable: { description: Validation error, content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
+
+  schemas:
+    Role:
+      type: string
+      enum: [APPLICATION_OWNER, SSO_OPERATIONS, ADMIN, AUDITOR, READ_ONLY, SUPER_ADMIN]
+    OnboardingStatus:
+      type: string
+      enum: [DRAFT, SUBMITTED, UNDER_REVIEW, CHANGES_REQUESTED, REJECTED, APPROVED, PROVISIONING, ACTIVE]
+    AccessStatus:
+      type: string
+      enum: [SUBMITTED, UNDER_REVIEW, CHANGES_REQUESTED, REJECTED, APPROVED, PROVISIONING, GRANTED]
+    Decision:
+      type: string
+      enum: [APPROVE, REJECT, REQUEST_CHANGES]
+    ResourceType:
+      type: string
+      enum: [AWS, WORKDAY, ROLE, TEAM]
+    Risk:
+      type: string
+      enum: [LOW, MEDIUM, HIGH]
+    AccessRequestKind:
+      type: string
+      enum: [grant, removal]
+    GrantType:
+      type: string
+      enum: [authorization_code, client_credentials, implicit, device_code]
+
+    Problem:
+      type: object
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        correlationId: { type: string }
+
+    Me:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string }
+        role: { $ref: "#/components/schemas/Role" }
+        group: { type: string, description: Entra group display name backing the role }
+        isSuperAdmin: { type: boolean }
+        impersonating:
+          type: object
+          nullable: true
+          properties:
+            role: { $ref: "#/components/schemas/Role" }
+
+    ImpersonationRequest:
+      type: object
+      required: [role]
+      properties:
+        role: { $ref: "#/components/schemas/Role" }
+
+    Application:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        env: { type: string, example: dev }
+        description: { type: string }
+        status: { $ref: "#/components/schemas/OnboardingStatus" }
+        owner: { type: string }
+        team: { type: array, items: { type: string } }
+        grants: { type: array, items: { $ref: "#/components/schemas/GrantType" } }
+        scopes: { type: array, items: { type: string } }
+        redirectUris: { type: array, items: { type: string, format: uri } }
+        group: { type: string }
+        clientId: { type: string, nullable: true, description: Set after provisioning }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ApplicationCreate:
+      type: object
+      required: [name, env]
+      properties:
+        name: { type: string }
+        env: { type: string }
+        description: { type: string }
+        grants: { type: array, items: { $ref: "#/components/schemas/GrantType" } }
+        scopes: { type: array, items: { type: string } }
+        uris: { type: array, items: { type: string, format: uri } }
+        group: { type: string }
+        team: { type: array, items: { type: string } }
+    ApplicationPatch:
+      type: object
+      properties:
+        description: { type: string }
+        grants: { type: array, items: { $ref: "#/components/schemas/GrantType" } }
+        scopes: { type: array, items: { type: string } }
+        uris: { type: array, items: { type: string, format: uri } }
+        group: { type: string }
+        team: { type: array, items: { type: string } }
+
+    DecisionBody:
+      type: object
+      required: [decision]
+      properties:
+        decision: { $ref: "#/components/schemas/Decision" }
+        reason: { type: string }
+
+    TimelineEntry:
+      type: object
+      properties:
+        id: { type: string }
+        status: { type: string }
+        actor: { type: string }
+        reason: { type: string, nullable: true }
+        at: { type: string, format: date-time }
+
+    CatalogResource:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        type: { $ref: "#/components/schemas/ResourceType" }
+        risk: { $ref: "#/components/schemas/Risk" }
+        description: { type: string }
+        mappedGroup: { type: string, description: Entra group an approval grants membership to }
+
+    AccessRequest:
+      type: object
+      properties:
+        id: { type: string }
+        resourceId: { type: string }
+        resourceName: { type: string }
+        kind: { $ref: "#/components/schemas/AccessRequestKind" }
+        status: { $ref: "#/components/schemas/AccessStatus" }
+        requester: { type: string }
+        justification: { type: string }
+        duration: { type: string, nullable: true, description: ISO-8601 duration or null for permanent }
+        approver: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    AccessRequestCreate:
+      type: object
+      required: [resourceId, justification]
+      properties:
+        resourceId: { type: string }
+        justification: { type: string }
+        duration: { type: string, nullable: true }
+
+    MyAccessItem:
+      type: object
+      properties:
+        resourceId: { type: string }
+        resourceName: { type: string }
+        grantedAt: { type: string, format: date-time }
+        requestId: { type: string }
+
+    Team:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        memberCount: { type: integer }
+    TeamCreate:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        description: { type: string }
+    TeamMember:
+      type: object
+      properties:
+        userId: { type: string }
+        name: { type: string }
+        addedAt: { type: string, format: date-time }
+    TeamMemberAdd:
+      type: object
+      required: [userId]
+      properties:
+        userId: { type: string }
+
+    ReviewItem:
+      type: object
+      properties:
+        id: { type: string }
+        kind: { type: string, enum: [onboarding, access] }
+        title: { type: string }
+        requester: { type: string }
+        submittedAt: { type: string, format: date-time }
+
+    AuditEvent:
+      type: object
+      properties:
+        id: { type: string }
+        seq: { type: integer, format: int64 }
+        actor: { type: string, description: Identity (Super Admin even while impersonating) }
+        effectiveRole: { $ref: "#/components/schemas/Role" }
+        action: { type: string }
+        resourceType: { type: string }
+        resourceId: { type: string }
+        at: { type: string, format: date-time }
+        prevHash: { type: string }
+        hash: { type: string }
+        detail: { type: object, additionalProperties: true }
+
+    Notification:
+      type: object
+      properties:
+        id: { type: string }
+        type: { type: string }
+        title: { type: string }
+        body: { type: string }
+        resourceRef: { type: string, nullable: true }
+        read: { type: boolean }
+        createdAt: { type: string, format: date-time }
+    NotificationFeed:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Notification" } }
+        unreadCount: { type: integer }
+        nextCursor: { type: string, nullable: true }
+
+    AssistantChatRequest:
+      type: object
+      required: [message]
+      properties:
+        message: { type: string }
+        context: { type: object, additionalProperties: true, description: Wizard fields in progress }
+    AssistantChatResponse:
+      type: object
+      properties:
+        reply: { type: string }
+        proposedActions: { type: array, items: { $ref: "#/components/schemas/ProposedAction" } }
+    ProposedAction:
+      type: object
+      properties:
+        id: { type: string }
+        tool: { type: string, enum: [draftDescription, validateRedirectUris, recommendScopes, checkGroupOwnership] }
+        args: { type: object, additionalProperties: true }
+        requiresApproval: { type: boolean }
+
+    # ---- page wrappers (cursor pagination) ----
+    ApplicationPage:
+      type: object
+      properties: { items: { type: array, items: { $ref: "#/components/schemas/Application" } }, nextCursor: { type: string, nullable: true } }
+    CatalogPage:
+      type: object
+      properties: { items: { type: array, items: { $ref: "#/components/schemas/CatalogResource" } }, nextCursor: { type: string, nullable: true } }
+    AccessRequestPage:
+      type: object
+      properties: { items: { type: array, items: { $ref: "#/components/schemas/AccessRequest" } }, nextCursor: { type: string, nullable: true } }
+    ReviewQueuePage:
+      type: object
+      properties: { items: { type: array, items: { $ref: "#/components/schemas/ReviewItem" } }, nextCursor: { type: string, nullable: true } }
+    AuditPage:
+      type: object
+      properties: { items: { type: array, items: { $ref: "#/components/schemas/AuditEvent" } }, nextCursor: { type: string, nullable: true } }
