@@ -1,7 +1,10 @@
 name: app-deploy
 
-# Build + push the app image on merge to main. The Fargate rollout (targeted terraform apply)
-# is wired in Phase 4 once the ECS service module exists.
+# Build + push the app image on merge to main, and record it to SSM.
+# It does NOT run Terraform: `infra` (env-gated) is the sole applier and reads the
+# image from SSM. To roll a new image, run `infra` (Actions > infra > Run workflow >
+# env=dev) and approve the `dev` environment. This keeps the approval gate as the guardrail
+# and avoids `-target` partial-graph hazards.
 on:
   push:
     branches: [main]
@@ -25,23 +28,11 @@ permissions:
 env:
   AWS_REGION: us-east-1
   ENV: ${{ github.event.inputs.env || 'dev' }}
-  # azuread provider auth (module.service depends on module.entra). Deploy runs on the
-  # :ref:refs/heads/main subject -> the gh-main federated credential.
-  ARM_USE_OIDC: "true"
-  ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-  ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
 
 jobs:
-  build-deploy:
+  build-push:
     runs-on: ubuntu-latest
-    # No `environment:` here on purpose: this job assumes the DEPLOY role, whose
-    # trust is keyed to the main-branch subject (sub=...:ref:refs/heads/main).
-    # Declaring an environment would change the OIDC token sub to
-    # ...:environment:<env> and break sts:AssumeRoleWithWebIdentity. The env-gated
-    # APPLY role (infra.yml) is the one keyed to :environment:dev.
-    concurrency:
-      group: terraform-apply-${{ github.event.inputs.env || 'dev' }}  # serialize with infra applies
-      cancel-in-progress: false
+    # No `environment:`: assumes the DEPLOY role (sub=...:ref:refs/heads/main).
     steps:
       - uses: actions/checkout@v4
       - uses: aws-actions/configure-aws-credentials@v4
@@ -60,17 +51,9 @@ jobs:
           docker build -t "$IMAGE" .
           docker push "$IMAGE"
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
-      - name: record image to SSM
+      - name: record image to SSM (infra apply reads this)
         run: |
           aws ssm put-parameter --name "/eop/${ENV}/app_image" \
             --type String --overwrite --value "${{ steps.build.outputs.image }}"
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.6.6
-          terraform_wrapper: false
-      - name: deploy (targeted ECS apply with the fresh image)
-        working-directory: deploy/terraform
-        run: |
-          terraform init -input=false -backend-config=envs/${ENV}.backend.hcl
-          terraform apply -input=false -auto-approve -lock-timeout=5m -target=module.service \
-            -var-file=envs/${ENV}.tfvars -var "app_image=${{ steps.build.outputs.image }}"
+      - name: next step
+        run: echo "Image pushed + recorded. Run the 'infra' workflow (env=dev) and approve to roll it."
