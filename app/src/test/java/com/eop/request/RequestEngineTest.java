@@ -3,11 +3,16 @@ package com.eop.request;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+
 import com.eop.TestcontainersConfig;
 import com.eop.authz.CurrentPrincipal;
 import com.eop.authz.ForbiddenException;
 import com.eop.authz.PortalRole;
 import com.eop.platform.ConflictException;
+import com.eop.platform.OutboxWriter;
 import com.eop.platform.PreconditionFailedException;
 import java.util.List;
 import java.util.Set;
@@ -19,6 +24,7 @@ import java.util.concurrent.Future;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
@@ -41,6 +47,10 @@ class RequestEngineTest {
 
     @Autowired
     JdbcTemplate jdbc;
+
+    // Real bean by default (other tests' outbox counts stay accurate); Spring resets it after each test.
+    @SpyBean
+    OutboxWriter outboxSpy;
 
     private CurrentPrincipal principal(String userId, Set<PortalRole> roles, PortalRole impersonated) {
         return new CurrentPrincipal(userId, "User " + userId, userId + "@eop", roles, impersonated);
@@ -220,5 +230,31 @@ class RequestEngineTest {
         assertThat(service.get(req.getId()).getStatus()).isEqualTo(RequestStatus.PROVISIONING); // unchanged
         assertThat(service.timeline(req.getId())).extracting(RequestEventEntity::getEventType)
                 .contains("PROVISIONING_FAILED");
+    }
+
+    // ---- transactional integrity: a failure mid-advance rolls back the WHOLE transition ----
+
+    @Test
+    void failure_after_the_guarded_update_rolls_back_status_event_and_outbox() {
+        var owner = principal("owner-1", Set.of(PortalRole.APPLICATION_OWNER), null);
+        var ops = principal("ops-1", Set.of(PortalRole.SSO_OPERATIONS), null);
+        var req = service.create(RequestType.ONBOARDING, "owner-1", "owner-1", "{}");
+        var underReview = service.submit(owner, req.getId(), null);
+        int versionBefore = underReview.getVersion();
+        long outboxBefore = outboxCount(req.getId());
+
+        // Fail the outbox append that happens AFTER the guarded UPDATE + the event insert, in the same tx.
+        doThrow(new RuntimeException("boom")).when(outboxSpy)
+                .append(any(), any(), eq("request.approved"), any());
+
+        assertThatThrownBy(() -> service.decide(ops, req.getId(), Decision.APPROVE, "x", null))
+                .isInstanceOf(RuntimeException.class);
+
+        var after = service.get(req.getId());
+        assertThat(after.getStatus()).isEqualTo(RequestStatus.UNDER_REVIEW); // UPDATE rolled back
+        assertThat(after.getVersion()).isEqualTo(versionBefore);             // version unchanged
+        assertThat(service.timeline(req.getId())).extracting(RequestEventEntity::getEventType)
+                .doesNotContain("DECISION_APPROVE");                         // event insert rolled back
+        assertThat(outboxCount(req.getId())).isEqualTo(outboxBefore);        // no outbox row leaked
     }
 }

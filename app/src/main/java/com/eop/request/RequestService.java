@@ -139,6 +139,10 @@ public class RequestService {
         emit(entity, "request.provisioning_failed");
     }
 
+    // NOTE: get() and timeline() are unguarded engine primitives — they do NOT enforce read ABAC. The
+    // Phase 4/5 controllers MUST apply app.read/access.read scope (owners see only their own) before
+    // returning these to a caller.
+
     @Transactional(readOnly = true)
     public RequestEntity get(UUID id) {
         return load(id);
