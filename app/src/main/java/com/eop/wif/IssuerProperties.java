@@ -28,6 +28,12 @@ public class IssuerProperties {
     /** AWS region override; falls back to the default provider chain (AWS_REGION) when blank. */
     private String region;
 
+    /** Entra tenant id — the token-exchange authority for Flow 2. */
+    private String tenantId;
+
+    /** Entra app (client) id — the client_id presented in the WIF exchange. */
+    private String clientId;
+
     public boolean isEnabled() {
         return enabled;
     }
@@ -74,5 +80,21 @@ public class IssuerProperties {
 
     public void setRegion(String region) {
         this.region = region;
+    }
+
+    public String getTenantId() {
+        return tenantId;
+    }
+
+    public void setTenantId(String tenantId) {
+        this.tenantId = tenantId;
+    }
+
+    public String getClientId() {
+        return clientId;
+    }
+
+    public void setClientId(String clientId) {
+        this.clientId = clientId;
     }
 }
