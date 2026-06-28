@@ -6,9 +6,27 @@ info:
     v1 backend contract for the request → approve → provision → audit → notify portal.
     DRAFT for review — freeze before module code (Phase 1). BFF pattern: auth via the
     server-side session cookie (tokens never reach the browser). Every mutation emits a
-    domain event. POSTs that create are idempotent via Idempotency-Key. Lists are
-    cursor-paginated. PATCH uses optimistic concurrency via ETag/If-Match. Errors are
-    RFC-7807 problem+json.
+    domain event. Errors are RFC-7807 problem+json. Lists are cursor-paginated.
+
+
+    Portal RBAC is derived from **Entra app roles** (the token `roles` claim), not the
+    group-membership claim — app-scoped, no overage, no cookie bloat. Entra **groups** are
+    used only for *access governance* (what downstream resources a user holds); access
+    provisioning adds/removes group members via Graph.
+
+
+    **Idempotency (POST creates):** `Idempotency-Key` is required on creating POSTs. Scope is
+    per-principal + per-endpoint, retained 24h. Semantics: (a) **replay** — same key → the
+    *original* response is returned (same status/body), never a duplicate side effect and never
+    a 409; (b) **conflict** — same key with a *different* request body → **422**; (c) a business
+    conflict such as a duplicate application name is a genuine **409**, distinct from idempotency.
+
+
+    **Optimistic concurrency:** resources that can change carry an `ETag`. Mutations that
+    transition or edit them require **`If-Match`** and return **412** on a stale tag. `If-Match`
+    is a courtesy layer; the authoritative serializer is the DB transition guard
+    (`UPDATE … WHERE status = <expected>` succeeds for exactly one caller), so concurrent
+    approvers can never both transition `UNDER_REVIEW`.
 
 servers:
   - url: /api/v1
@@ -69,13 +87,16 @@ paths:
     post:
       tags: [applications]
       summary: Create an onboarding request (DRAFT)
+      description: >
+        Idempotent via Idempotency-Key (replay → original 201). 409 here means a genuine business
+        conflict (e.g. duplicate application name), NOT an idempotency replay. 422 = same key, different body.
       parameters: [ { $ref: "#/components/parameters/IdempotencyKey" } ]
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: "#/components/schemas/ApplicationCreate" } } }
       responses:
         "201": { description: Created, headers: { ETag: { $ref: "#/components/headers/ETag" } }, content: { application/json: { schema: { $ref: "#/components/schemas/Application" } } } }
-        "409": { $ref: "#/components/responses/Conflict" }
+        "409": { description: "Business conflict (e.g. duplicate name) — not an idempotency replay", content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
         "422": { $ref: "#/components/responses/Unprocessable" }
 
   /applications/{id}:
@@ -101,24 +122,26 @@ paths:
     post:
       tags: [applications]
       summary: Submit (DRAFT → SUBMITTED)
-      parameters: [ { $ref: "#/components/parameters/IdempotencyKey" } ]
+      parameters: [ { $ref: "#/components/parameters/IdempotencyKey" }, { $ref: "#/components/parameters/IfMatch" } ]
       responses:
         "200": { description: Submitted, content: { application/json: { schema: { $ref: "#/components/schemas/Application" } } } }
         "409": { $ref: "#/components/responses/Conflict" }
+        "412": { $ref: "#/components/responses/PreconditionFailed" }
 
   /applications/{id}/decision:
     parameters: [ { $ref: "#/components/parameters/Id" } ]
     post:
       tags: [applications]
-      summary: Approver decision (APPROVE | REJECT | REQUEST_CHANGES). Separation of duties — requester != approver.
-      parameters: [ { $ref: "#/components/parameters/IdempotencyKey" } ]
+      summary: Approver decision (APPROVE | REJECT | REQUEST_CHANGES). Separation of duties — requester != approver (real principal, even while impersonating).
+      parameters: [ { $ref: "#/components/parameters/IdempotencyKey" }, { $ref: "#/components/parameters/IfMatch" } ]
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: "#/components/schemas/DecisionBody" } } }
       responses:
         "200": { description: Decision applied, content: { application/json: { schema: { $ref: "#/components/schemas/Application" } } } }
-        "403": { description: "Not an approver, or separation-of-duties violation", content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
+        "412": { $ref: "#/components/responses/PreconditionFailed" }
 
   /applications/{id}/timeline:
     parameters: [ { $ref: "#/components/parameters/Id" } ]
@@ -179,8 +202,8 @@ paths:
     parameters: [ { $ref: "#/components/parameters/Id" } ]
     post:
       tags: [access]
-      summary: Approver decision. Separation of duties enforced.
-      parameters: [ { $ref: "#/components/parameters/IdempotencyKey" } ]
+      summary: Approver decision. Separation of duties enforced on the real principal (even while impersonating).
+      parameters: [ { $ref: "#/components/parameters/IdempotencyKey" }, { $ref: "#/components/parameters/IfMatch" } ]
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: "#/components/schemas/DecisionBody" } } }
@@ -188,6 +211,7 @@ paths:
         "200": { description: Decision applied, content: { application/json: { schema: { $ref: "#/components/schemas/AccessRequest" } } } }
         "403": { $ref: "#/components/responses/Forbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
+        "412": { $ref: "#/components/responses/PreconditionFailed" }
 
   /my-access:
     get:
@@ -261,6 +285,14 @@ paths:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AuditPage" } } } }
         "403": { $ref: "#/components/responses/Forbidden" }
 
+  /audit/verify:
+    get:
+      tags: [audit]
+      summary: Verify the audit hash chain is intact (single-writer append; tamper-evident)
+      responses:
+        "200": { description: Result, content: { application/json: { schema: { $ref: "#/components/schemas/AuditVerifyResult" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
   /notifications:
     get:
       tags: [notifications]
@@ -310,7 +342,10 @@ components:
       in: header
       required: true
       schema: { type: string }
-      description: Client-generated key; replays return the original result, never a duplicate side effect.
+      description: >
+        Client-generated key. Replay (same key) → original response, never a duplicate side effect.
+        Same key + different body → 422. Scope: per-principal + per-endpoint; retained 24h. A genuine
+        business conflict (e.g. duplicate name) is a 409, not an idempotency replay.
     IfMatch:
       name: If-Match
       in: header
@@ -371,8 +406,10 @@ components:
         id: { type: string }
         name: { type: string }
         email: { type: string }
-        role: { $ref: "#/components/schemas/Role" }
-        group: { type: string, description: Entra group display name backing the role }
+        role:
+          allOf: [ { $ref: "#/components/schemas/Role" } ]
+          description: "Resolved from the Entra app-roles (`roles`) claim; most-privileged wins if multiple"
+        group: { type: string, nullable: true, description: "Informational access-governance/team group; NOT the RBAC source" }
         isSuperAdmin: { type: boolean }
         impersonating:
           type: object
@@ -381,10 +418,13 @@ components:
             role: { $ref: "#/components/schemas/Role" }
 
     ImpersonationRequest:
+      description: >
+        v1 ships role-level impersonation (set `role`). The optional `user` is reserved for future
+        user-level impersonation so adding it later is not a contract change; ignored in v1.
       type: object
-      required: [role]
       properties:
         role: { $ref: "#/components/schemas/Role" }
+        user: { type: string, nullable: true, description: "Reserved (future user-level impersonation); ignored in v1" }
 
     Application:
       type: object
@@ -529,6 +569,13 @@ components:
         prevHash: { type: string }
         hash: { type: string }
         detail: { type: object, additionalProperties: true }
+
+    AuditVerifyResult:
+      type: object
+      properties:
+        valid: { type: boolean }
+        checkedThrough: { type: integer, format: int64, description: Highest seq verified }
+        brokenAt: { type: integer, format: int64, nullable: true, description: "First seq where the chain breaks, or null" }
 
     Notification:
       type: object

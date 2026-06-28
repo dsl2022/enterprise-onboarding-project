@@ -21,6 +21,16 @@ jobs:
       - name: Docker build (compiles + packages the app)
         run: docker build -t eop-app:ci .
 
+  openapi:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20" # nimma/Spectral JIT is unstable on newer Node
+      - name: Spectral lint (frozen contract can't drift invalid)
+        run: npx --yes @stoplight/spectral-cli@6 lint docs/api/openapi-v1.yaml --ruleset .spectral.yaml --fail-severity=error
+
   terraform:
     runs-on: ubuntu-latest
     defaults:

@@ -9,7 +9,9 @@ prompt built later against the frozen contract — not built here. All Terraform
   **separate track** with its own discussion. pgvector embeddings/tables deferred with it.
 - **Blue/green (CodeDeploy):** built as the **final, skippable phase**; everything else ships on the
   v0 rolling deploy first.
-- **RBAC role source:** Entra **group-membership claim** in the ID token; map group GUID → role.
+- **RBAC role source:** Entra **app roles** (`roles` claim) — app-scoped, no overage/bloat (PR #11
+  review #1). Entra **groups** are kept for **access governance only** (downstream resource holdings),
+  not portal-role resolution.
 - **Dev data tier:** smallest **single-AZ** (db.t4g.micro, cache.t4g.micro single node, ≥2 small
   tasks); Multi-AZ behind a variable flag for later.
 - **Defaults:** Flyway migrations; transactional **outbox in Postgres** for events (not SQS);
@@ -53,12 +55,13 @@ member add/remove; pagination/429/403) · audit (append-only, hash-chained; impe
 Super Admin) · notify (SES + in-app feed; event-driven, async, retry + dead-letter, idempotent) ·
 assistant (RAG + wizard tools; **stubbed for now**).
 
-## 3. Roles (bundles of permissions, from Entra group membership)
-APPLICATION_OWNER (App-Owners) · SSO_OPERATIONS (SSO-Operations) · ADMIN (Admins) · AUDITOR (Auditors)
-· READ_ONLY (Read-Only) · SUPER_ADMIN (Super-Admins, god mode + audited impersonation). Seed the
-missing groups + assign test users. Impersonation: Super Admin only; effective role swaps but identity
-stays Super Admin and every action is audited under Super Admin. Enforce permission + ownership + SoD
-at the service layer.
+## 3. Roles (bundles of permissions, from Entra **app roles**)
+APPLICATION_OWNER · SSO_OPERATIONS · ADMIN · AUDITOR · READ_ONLY · SUPER_ADMIN (god mode + audited
+impersonation). Declared as **app roles** on the workload app; assign test users to app roles (not
+groups). Multiple roles → most-privileged wins. Impersonation: Super Admin only; **permissions** swap
+to the impersonated role, but **identity for SoD, ABAC ownership, and audit attribution stays the real
+Super Admin** (prevents self-approval laundering). Enforce permission + ownership + SoD at the service
+layer. See [docs/api/rbac-matrix.md](docs/api/rbac-matrix.md).
 
 ## 4. API contract (frozen in Phase 1 — see docs/api/openapi-v1.yaml)
 Versioned REST; every mutation emits a domain event; POSTs take `Idempotency-Key`; lists
@@ -89,9 +92,10 @@ migrations. Tables: applications, requests, onboarding/access rows, catalog_reso
 team_members, audit_events (hash-chained), notifications, (assistant_docs+embeddings deferred).
 
 ## 8. HA upgrade
-≥2 Fargate tasks; BFF session → ElastiCache Redis (Spring Session); pre-provision the WIF issuer
-signing key in Secrets Manager (Terraform, once — removes the single-task race). Graph token cache may
-stay per-task. RDS Multi-AZ behind a flag.
+≥2 Fargate tasks; BFF session → ElastiCache Redis (Spring Session). Dev Redis is **single-node — a
+session SPOF, not true HA**; a replica/multi-AZ sits behind a flag for prod. Pre-provision the WIF
+issuer signing key in Secrets Manager (Terraform, once — removes the single-task race). Graph token
+cache may stay per-task. RDS Multi-AZ behind a flag.
 
 ## 9. Blue/green (final phase)
 ECS `deploymentController=CODE_DEPLOY`; two target groups + test listener; appspec.yaml; canary/linear
@@ -104,7 +108,10 @@ assistant (**stub**) → 8 HA (multi-task, Redis, pre-provisioned key) → 9 blu
 Tests each phase: unit, ArchUnit, Testcontainers, contract tests, SoD rule.
 
 ## 11. Definition of done
-Real per-role logins; Super Admin impersonation (audited, banner); onboarding → real Entra app+client
-ID → active with audit+email+bell; access → real Graph group-add → granted in My Access with
-notifications; removal works; SoD enforced; ≥2 tasks + Redis sessions; blue/green canary +
-auto-rollback; clean `terraform destroy`.
+Real per-role logins **from Entra app roles**; Super Admin impersonation (audited, banner) where
+**SoD/ABAC/audit resolve to the real Super Admin** (self-approval-via-impersonation is blocked);
+onboarding → real Entra app+client ID → active with audit+email+bell; access → real Graph group-add →
+granted in My Access with notifications; removal works; **SoD enforced on the real principal**; the
+**audit chain is single-writer + DB-immutable (`UPDATE`/`DELETE` revoked) and `/audit/verify` passes**;
+≥2 tasks + Redis sessions (dev Redis single-node = SPOF, documented); blue/green canary + auto-rollback;
+clean `terraform destroy`.
