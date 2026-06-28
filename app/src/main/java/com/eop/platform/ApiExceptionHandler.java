@@ -22,6 +22,31 @@ public class ApiExceptionHandler {
         problem.setTitle("Forbidden");
         problem.setType(URI.create("urn:eop:error:" + ex.reason().name().toLowerCase()));
         problem.setProperty("reason", ex.reason().name());
+        return withCorrelation(problem);
+    }
+
+    @ExceptionHandler(NotFoundException.class)
+    public ProblemDetail handleNotFound(NotFoundException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+        problem.setTitle("Not Found");
+        return withCorrelation(problem);
+    }
+
+    @ExceptionHandler(ConflictException.class)
+    public ProblemDetail handleConflict(ConflictException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setTitle("Conflict");
+        return withCorrelation(problem);
+    }
+
+    @ExceptionHandler(PreconditionFailedException.class)
+    public ProblemDetail handlePreconditionFailed(PreconditionFailedException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.PRECONDITION_FAILED, ex.getMessage());
+        problem.setTitle("Precondition Failed");
+        return withCorrelation(problem);
+    }
+
+    private ProblemDetail withCorrelation(ProblemDetail problem) {
         problem.setProperty("correlationId", MDC.get(CorrelationIdFilter.MDC_KEY));
         return problem;
     }
