@@ -38,3 +38,12 @@ resource "azuread_application_federated_identity_credential" "wif" {
   subject               = var.workload_subject
   audiences             = ["api://AzureADTokenExchange"]
 }
+
+# Flow 1 (login) confidential-client secret. The one accepted stored secret for v0
+# (ADR-0006); the caller writes it to AWS Secrets Manager. Upgrade to a certificate later.
+resource "azuread_application_password" "flow1" {
+  count                 = var.create_client_secret ? 1 : 0
+  application_object_id = azuread_application.app.object_id
+  display_name          = "flow1-bff-secret"
+  end_date_relative     = "4320h" # 180 days
+}

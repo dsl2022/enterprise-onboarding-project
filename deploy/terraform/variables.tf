@@ -15,6 +15,11 @@ variable "app_image" {
   default     = ""
 }
 
+variable "entra_tenant_id" {
+  description = "Microsoft Entra tenant id (Flow 1 OIDC authority)."
+  type        = string
+}
+
 variable "log_retention_days" {
   description = "CloudWatch log retention."
   type        = number

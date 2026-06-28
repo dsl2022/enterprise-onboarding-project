@@ -1,0 +1,19 @@
+# Active only under the `auth` profile (SPRING_PROFILES_ACTIVE=auth on ECS). Keeps the OIDC client
+# registration out of local/CI boots so the app starts without Entra config. All values from env.
+spring:
+  security:
+    oauth2:
+      client:
+        registration:
+          entra:
+            provider: entra
+            client-id: ${ENTRA_APP_CLIENT_ID}
+            client-secret: ${ENTRA_CLIENT_SECRET}
+            authorization-grant-type: authorization_code
+            scope: openid,profile,email,User.Read
+            redirect-uri: ${APP_REDIRECT_URI:{baseUrl}/login/oauth2/code/entra}
+            client-name: Microsoft Entra
+        provider:
+          entra:
+            # Spring auto-discovers authorize/token/jwks from this issuer and validates the ID token.
+            issuer-uri: https://login.microsoftonline.com/${ENTRA_TENANT_ID}/v2.0

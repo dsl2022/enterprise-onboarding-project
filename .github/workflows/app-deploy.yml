@@ -25,6 +25,11 @@ permissions:
 env:
   AWS_REGION: us-east-1
   ENV: ${{ github.event.inputs.env || 'dev' }}
+  # azuread provider auth (module.service depends on module.entra). Deploy runs on the
+  # :ref:refs/heads/main subject -> the gh-main federated credential.
+  ARM_USE_OIDC: "true"
+  ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
 
 jobs:
   build-deploy:
@@ -59,10 +64,13 @@ jobs:
         run: |
           aws ssm put-parameter --name "/eop/${ENV}/app_image" \
             --type String --overwrite --value "${{ steps.build.outputs.image }}"
-      # Phase 4: roll the image onto Fargate without clobbering other infra:
-      # - name: deploy (targeted apply)
-      #   working-directory: deploy/terraform
-      #   run: |
-      #     terraform init -input=false -backend-config=envs/${ENV}.backend.hcl
-      #     terraform apply -input=false -auto-approve -target=module.app \
-      #       -var-file=envs/${ENV}.tfvars -var="app_image=${{ steps.build.outputs.image }}"
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.6
+          terraform_wrapper: false
+      - name: deploy (targeted ECS apply with the fresh image)
+        working-directory: deploy/terraform
+        run: |
+          terraform init -input=false -backend-config=envs/${ENV}.backend.hcl
+          terraform apply -input=false -auto-approve -lock-timeout=5m -target=module.service \
+            -var-file=envs/${ENV}.tfvars -var "app_image=${{ steps.build.outputs.image }}"
