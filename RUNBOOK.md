@@ -208,9 +208,22 @@ az rest --method GET \
 
 ## 5. Issuer signing-key rotation (Phase 2)
 
-The workload OIDC issuer's RSA key lives in Secrets Manager (CMK-encrypted). To rotate: add a new key
-with a new `kid` to the JWKS (publish both), switch the app's active signing `kid`, let old tokens
-expire, then drop the old key from the JWKS. Full procedure added when the issuer module lands (Phase 2).
+The workload OIDC issuer's RSA key lives **only** in Secrets Manager (`eop-dev/issuer-signing-key`,
+CMK-encrypted). The app generates it on first boot and publishes the public half to
+`<issuer_url>/.well-known/jwks.json`. Workload assertions are short-lived (minutes), so rotation is
+simple:
+```bash
+# 1) Clear the stored key so the app regenerates on next start (Secrets Manager keeps the prior
+#    version as AWSPREVIOUS, so you can roll back):
+aws secretsmanager put-secret-value --secret-id eop-dev/issuer-signing-key \
+  --secret-string '{}'   # any non-key value; app treats unparbleable/empty as "regenerate"
+# 2) Restart the ECS service so a task boots, generates a fresh key (new kid), and overwrites jwks.json:
+aws ecs update-service --cluster eop-dev --service eop-dev --force-new-deployment
+# 3) CloudFront serves the issuer with Managed-CachingDisabled, so the new JWKS is visible immediately.
+#    Old assertions expire within minutes; no dual-publish needed at v0's single-key scale.
+```
+> A zero-downtime multi-key rotation (publish new + old, switch active `kid`, drop old) is the upgrade
+> path if assertion lifetimes ever grow; not needed for v0.
 
 ## 6. Teardown
 

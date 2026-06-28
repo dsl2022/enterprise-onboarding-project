@@ -12,3 +12,12 @@ module "platform" {
   name_prefix        = local.name_prefix
   log_retention_days = var.log_retention_days
 }
+
+# Phase 2: workload OIDC issuer (private S3 + CloudFront/OAC + discovery doc +
+# empty signing secret + task IAM policy). The app publishes jwks.json at runtime.
+module "issuer" {
+  source = "./modules/issuer"
+
+  name_prefix = local.name_prefix
+  kms_key_arn = module.platform.kms_key_arn
+}
