@@ -105,9 +105,15 @@ export class AuthService {
 
   // ---- Session navigation --------------------------------------------------
 
-  /** Real mode: full-page redirect to the BFF → Entra. */
+  /**
+   * Real mode: full-page redirect to the BFF → Entra. Passes the current SPA path
+   * as `returnTo` so the BFF sends us back to /app after sign-in (else it defaults
+   * to "/", the legacy HTML). The server validates it to a same-origin path.
+   */
   login(): void {
-    this.doc.defaultView!.location.href = LOGIN_URL;
+    const win = this.doc.defaultView!;
+    const returnTo = encodeURIComponent(win.location.pathname + win.location.search);
+    win.location.href = `${LOGIN_URL}?returnTo=${returnTo}`;
   }
 
   logout(): void {

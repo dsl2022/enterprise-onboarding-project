@@ -12,7 +12,9 @@ import org.springframework.security.oauth2.client.registration.ClientRegistratio
 import org.springframework.security.oauth2.client.web.DefaultOAuth2AuthorizationRequestResolver;
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestCustomizers;
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestResolver;
+import jakarta.servlet.http.HttpSession;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.logout.LogoutSuccessHandler;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
@@ -52,7 +54,7 @@ public class SecurityConfig {
                         .anyRequest().permitAll())
                 .oauth2Login(o -> o
                         .authorizationEndpoint(e -> e.authorizationRequestResolver(pkceResolver(repo)))
-                        .defaultSuccessUrl("/", true))
+                        .successHandler(returnToSuccessHandler()))
                 // RP-initiated logout: clear the local session AND redirect to Entra's
                 // end_session_endpoint so the IdP session is dropped too (real sign-out).
                 .logout(l -> l
@@ -72,6 +74,24 @@ public class SecurityConfig {
         var handler = new OidcClientInitiatedLogoutSuccessHandler(repo);
         handler.setPostLogoutRedirectUri(StringUtils.hasText(appBaseUrl) ? appBaseUrl + "/" : "{baseUrl}/");
         return handler;
+    }
+
+    // On login success, redirect to the same-origin `returnTo` the SPA stashed at /auth/login
+    // (so a sign-in started from /app lands back on /app), falling back to "/" otherwise. Replaces
+    // the old defaultSuccessUrl("/", true). Re-validated here as defense in depth against open redirects.
+    private AuthenticationSuccessHandler returnToSuccessHandler() {
+        return (request, response, authentication) -> {
+            String target = "/";
+            HttpSession session = request.getSession(false);
+            if (session != null) {
+                Object stashed = session.getAttribute(SafeRelativePath.RETURN_TO_SESSION_ATTR);
+                session.removeAttribute(SafeRelativePath.RETURN_TO_SESSION_ATTR);
+                if (stashed instanceof String path && SafeRelativePath.isValid(path)) {
+                    target = path;
+                }
+            }
+            response.sendRedirect(target);
+        };
     }
 
     // Force PKCE even though this is a confidential client (defense in depth; brief requires PKCE).
