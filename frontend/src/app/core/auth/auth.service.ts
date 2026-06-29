@@ -17,6 +17,21 @@ import { Permission, permissionsFor } from './permissions';
  * REDUCED (impersonated) role, so `can()` gates to that view automatically, while
  * `isSuperAdmin` stays true so the impersonation banner/control remain visible.
  */
+/**
+ * The roles that actually govern the UI. While a Super Admin impersonates, this
+ * is ONLY the impersonated role — independent of whether the backend pre-reduces
+ * `roles[]` or returns the real held set (the contract wording is ambiguous;
+ * tracked as Q-003). Reducing off `impersonating` here removes that coupling, so
+ * gating is correct under either backend semantics. Identity/SoD/audit stay the
+ * real principal server-side; this only governs what UI we show.
+ */
+export function effectiveRoles(me: Me | null): Role[] {
+  if (!me) {
+    return [];
+  }
+  return me.impersonating ? [me.impersonating.role] : me.roles;
+}
+
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly http = inject(HttpClient);
@@ -36,11 +51,8 @@ export class AuthService {
   readonly impersonatedRole = computed<Role | null>(() => this._me()?.impersonating?.role ?? null);
   readonly isImpersonating = computed(() => this.impersonatedRole() !== null);
 
-  /** Effective permission set (union of held roles; reduced while impersonating). */
-  readonly permissions = computed<Set<Permission>>(() => {
-    const me = this._me();
-    return me ? permissionsFor(me.roles) : new Set<Permission>();
-  });
+  /** Effective permission set (union of the effective roles; see effectiveRoles). */
+  readonly permissions = computed<Set<Permission>>(() => permissionsFor(effectiveRoles(this._me())));
 
   private loadOnce: Promise<Me | null> | null = null;
 

@@ -2,7 +2,7 @@ import { HttpErrorResponse, HttpInterceptorFn } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { DOCUMENT } from '@angular/common';
 import { catchError, throwError } from 'rxjs';
-import { LOGIN_URL } from '../api/api.config';
+import { API_BASE, LOGIN_URL } from '../api/api.config';
 import { ProblemError, toProblem } from './problem';
 
 /**
@@ -20,9 +20,12 @@ export const credentialsInterceptor: HttpInterceptorFn = (req, next) =>
  */
 export const problemInterceptor: HttpInterceptorFn = (req, next) => {
   const doc = inject(DOCUMENT);
+  // Exact path match (not endsWith) so a future endpoint ending in "/me" can't
+  // accidentally inherit the no-redirect rule.
+  const isMeProbe = req.url.split('?')[0].endsWith(`${API_BASE}/me`);
   return next(req).pipe(
     catchError((err: HttpErrorResponse) => {
-      if (err.status === 401 && !req.url.endsWith('/me')) {
+      if (err.status === 401 && !isMeProbe) {
         const here = doc.defaultView?.location;
         if (here) {
           const returnTo = encodeURIComponent(here.pathname + here.search);
