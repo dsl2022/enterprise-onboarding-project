@@ -71,6 +71,15 @@ identity + audit stay Super Admin.
 - **Separation of duties:** `*.decide` is rejected (403) if the principal is the request's requester
   or `submittedBy`, regardless of role.
 - **ABAC ownership:** `✔(own)` permissions check the resource's owner/team against the principal.
+- **Team membership = ABAC scope, never RBAC.** Being a member of a team grants **no role permissions** —
+  portal RBAC comes only from the Entra app-roles claim. It confers only **ABAC read co-ownership**: an
+  active member resolves `team.read(own)` on their team. **`team.manage(own)` is creator-only** — members
+  are read-only; only the team's creator (or an `ALL`-scoped ADMIN/SUPER_ADMIN) can add/remove members. This
+  keeps delegation non-viral: a member cannot grow the team or (once app co-ownership lands) grant it to
+  others. It can never confer an approver role either: `app.decide`/`access.decide` are `ALL`-scoped, never
+  team-granted, and SoD resolves the **real** principal. *(v1 scope, Pin A: active for `Team` resources only.
+  Onboarding `Application.team[]` co-ownership is deferred — a future `authz`-owned `TeamMembershipResolver`
+  port; `RequestEntity` keeps the empty `teamMemberIds()` default until then.)*
 
 ### Impersonation — permissions vs identity (the laundering guard)
 While a Super Admin impersonates a role:

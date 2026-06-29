@@ -31,3 +31,4 @@ terraform.rc
 .idea/
 *.iml
 .vscode/
+.claude/

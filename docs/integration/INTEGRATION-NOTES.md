@@ -61,6 +61,15 @@ stored in **Redis**, carried by a **session cookie**.
 5. **Onboarding `name`/`env` are immutable** after create; `PATCH` merges the other fields only.
 6. **`uris` (create) projects to `redirectUris`** (read) — a deliberate contract rename; the generated
    client handles it, just don't be surprised.
+7. **`TeamMember.name` is `null` in v1** — portal-local teams store only the member's `userId` (oid); the
+   display name isn't resolved (no directory lookup yet). Render from your own identity source (e.g. `/me`
+   for the current user) or show the id; don't expect a populated `name`.
+8. **Teams: `team.read` is broad, `team.manage` is owner-only.** A user sees a team if they created it OR
+   are an active member (`GET /teams` is scoped that way; members can read the roster). But **only the
+   creator** (or ADMIN/SUPER_ADMIN) can add/remove members — a non-creator member gets **403** on
+   `POST/DELETE …/members`. Gate the "manage members" UI on being the team's creator, not just a member.
+   Team **name** is tenant-unique (dup `POST /teams` → 409); there is **no `DELETE /teams/{id}`** (teams
+   aren't deletable via the API in v1).
 
 ## 6. Open decision (confirm with the human)
 - **Where does the Angular app live?** Same repo / sibling folder / separate repo — and is it served
