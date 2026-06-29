@@ -20,3 +20,10 @@ entra_app_role_assignments = [
 # at /api/v1/me (and Super Admin impersonation works), set this true in a follow-up apply to require an
 # app-role assignment for sign-in.
 # entra_require_app_role_assignment = true
+
+# ---- Phase 4b: activate real Entra app-registration provisioning ----
+# Admin consent for Application.ReadWrite.OwnedBy was granted on the eop-dev-app SP (2026-06-29) — consent
+# is in place BEFORE the token mint, per the ordering rule. Flipping this true sets
+# EOP_PROVISIONING_SIMULATE=false + EOP_PROVISIONING_SCHEDULER=true, so approvals create REAL registrations.
+# Activation happens on the next gated `infra` apply (which rolls the task).
+provisioning_real = true
