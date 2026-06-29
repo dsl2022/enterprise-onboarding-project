@@ -61,6 +61,11 @@ resource "aws_lb_target_group" "app" {
   vpc_id      = var.vpc_id
   target_type = "ip" # Fargate awsvpc
 
+  # Phase 8 (HA): on task replacement/scale-in the ALB stops sending NEW requests, then waits this long for
+  # in-flight requests to finish before fully removing the target — paired with the app's 25s graceful drain
+  # + the container's 60s stopTimeout so a rolling deploy drops no requests.
+  deregistration_delay = 30
+
   health_check {
     path                = "/healthz"
     matcher             = "200"

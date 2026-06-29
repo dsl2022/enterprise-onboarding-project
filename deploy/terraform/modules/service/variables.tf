@@ -83,3 +83,11 @@ variable "access_provisioning_real" {
   type        = bool
   default     = false
 }
+
+# Phase 8 (HA): number of Fargate tasks. Default 2 for high availability (survive one task/AZ loss). Fixed,
+# not autoscaled — autoscaling is a separate later enhancement and is not the same thing as HA.
+variable "desired_count" {
+  description = "Number of Fargate tasks to run (>=2 for HA)."
+  type        = number
+  default     = 2
+}

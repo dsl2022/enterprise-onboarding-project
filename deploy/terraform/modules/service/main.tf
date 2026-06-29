@@ -89,6 +89,10 @@ resource "aws_ecs_task_definition" "app" {
       image        = var.app_image
       essential    = true
       portMappings = [{ containerPort = var.container_port, protocol = "tcp" }]
+      # Phase 8 (HA): give ECS longer than the app's 25s graceful-shutdown window before it SIGKILLs, so a
+      # rolling deploy / scale-in drains in-flight requests instead of cutting them mid-flight. Default is 30s
+      # — too close to the drain window; 60s leaves headroom for a slow tick to finish.
+      stopTimeout = 60
       environment = concat([
         { name = "SPRING_PROFILES_ACTIVE", value = "auth,data" },
         { name = "WIF_ENABLED", value = "true" },
@@ -155,8 +159,21 @@ resource "aws_ecs_service" "app" {
   name            = var.name_prefix
   cluster         = aws_ecs_cluster.this.id
   task_definition = aws_ecs_task_definition.app[0].arn
-  desired_count   = 1
-  launch_type     = "FARGATE"
+  # Phase 8 (HA): run ≥2 tasks so the loss of one task/AZ doesn't take the app down. The two private subnets
+  # span two AZs, so Fargate's default spread lands one task per AZ. Every concurrency invariant is already
+  # multi-task-safe (guarded serializer, advisory-lock audit leader, SKIP-LOCKED notify, guarded provisioning
+  # claims + reaper, idempotency, Redis sessions). Autoscaling is a separate, later enhancement (≠ HA).
+  desired_count = var.desired_count
+  launch_type   = "FARGATE"
+
+  # Phase 8: safe rolling deploys. The circuit breaker auto-rolls-back a deploy whose tasks fail to stabilize;
+  # min 100% / max 200% keeps the full desired count healthy throughout a rolling replace.
+  deployment_minimum_healthy_percent = 100
+  deployment_maximum_percent         = 200
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
 
   network_configuration {
     subnets          = var.private_subnet_ids

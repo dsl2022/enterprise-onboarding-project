@@ -29,3 +29,11 @@ entra_app_role_assignments = [
 # token issue).
 onboarding_provisioning_real = true
 access_provisioning_real     = true
+
+# ---- Phase 8: HA ----
+# App tier runs 2 Fargate tasks across 2 AZs (the service module default desired_count=2) — real app-tier HA.
+# Data tier stays SINGLE-AZ in dev (cost): RDS single-AZ + a single-node Redis (a session SPOF, not an outage
+# of the governed workflow). For a prod env, flip this to `multi_az = true` (RDS Multi-AZ + Redis replica +
+# automatic failover); the app already tolerates a failover blip (Flyway connect-retries, Hikari
+# initialization-fail-timeout=-1, Redis reconnect). Explicit here so the dev single-AZ choice is on the record.
+multi_az = false
