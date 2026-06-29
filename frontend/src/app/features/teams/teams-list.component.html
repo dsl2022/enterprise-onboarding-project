@@ -1,0 +1,44 @@
+<div class="page">
+  <app-page-header title="Teams" subtitle="Teams you created or belong to, and their members.">
+    @if (auth.can('team.manage')) {
+      <button actions mat-flat-button color="primary" (click)="newTeam()">
+        <mat-icon>add</mat-icon> New team
+      </button>
+    }
+  </app-page-header>
+
+  @if (loading()) {
+    <div class="state"><mat-spinner diameter="32" /></div>
+  } @else if (error()) {
+    <div class="card-surface state error">
+      <mat-icon>error_outline</mat-icon>
+      <span>{{ error() }}</span>
+      <button mat-button (click)="load()">Retry</button>
+    </div>
+  } @else if (teams().length === 0) {
+    <div class="card-surface">
+      <app-empty-state icon="groups" heading="No teams yet"
+        [message]="auth.can('team.manage') ? 'Create a team to group members.' : 'You are not a member of any team yet.'">
+        @if (auth.can('team.manage')) {
+          <button mat-flat-button color="primary" (click)="newTeam()">New team</button>
+        }
+      </app-empty-state>
+    </div>
+  } @else {
+    <div class="card-surface list">
+      @for (team of teams(); track team.id) {
+        <a class="row" [routerLink]="['/teams', team.id]">
+          <div class="info">
+            <span class="name">{{ team.name }}</span>
+            @if (team.description) {
+              <span class="desc text-muted">{{ team.description }}</span>
+            }
+          </div>
+          <span class="count text-muted">
+            {{ team.memberCount }} {{ team.memberCount === 1 ? 'member' : 'members' }}
+          </span>
+        </a>
+      }
+    </div>
+  }
+</div>

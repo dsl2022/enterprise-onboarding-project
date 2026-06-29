@@ -1,0 +1,45 @@
+<div class="page">
+  @if (loading()) {
+    <div class="state"><mat-spinner diameter="32" /></div>
+  } @else if (error()) {
+    <div class="card-surface state error">
+      <mat-icon>error_outline</mat-icon>
+      <span>{{ error() }}</span>
+    </div>
+  } @else {
+    <app-page-header
+      [title]="team()?.name ?? 'Team'"
+      [subtitle]="team()?.description ?? ''"
+    >
+      @if (auth.can('team.manage')) {
+        <button actions mat-flat-button color="primary" (click)="addMember()">
+          <mat-icon>person_add</mat-icon> Add member
+        </button>
+      }
+    </app-page-header>
+
+    <div class="card-surface">
+      @if (members().length === 0) {
+        <app-empty-state icon="person_off" heading="No members"
+          message="This team has no active members yet." />
+      } @else {
+        <div class="list">
+          @for (m of members(); track m.userId) {
+            <div class="member-row">
+              <div class="member-info">
+                <span class="avatar" aria-hidden="true">{{ '@' }}</span>
+                <span class="uid mono">{{ m.userId }}</span>
+              </div>
+              @if (auth.can('team.manage')) {
+                <button mat-icon-button aria-label="Remove member"
+                  [disabled]="acting() === m.userId" (click)="removeMember(m)">
+                  <mat-icon>person_remove</mat-icon>
+                </button>
+              }
+            </div>
+          }
+        </div>
+      }
+    </div>
+  }
+</div>
