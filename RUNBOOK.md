@@ -356,9 +356,16 @@ so the first apply only declares the permission.
    ```bash
    az ad sp show --id <entra_app_client_id> --query "appRoles" -o table   # or check oauth2PermissionGrants/appRoleAssignments
    ```
-3. **Flip on + roll.** Set `provisioning_real = true` in `dev.tfvars`, re-run `infra` + approve (this sets
-   `EOP_PROVISIONING_SIMULATE=false` + `EOP_PROVISIONING_SCHEDULER=true` on the task and rolls it). The
-   GraphProvisioner also requires `WIF_ENABLED=true` (already set) since it mints over the WIF token.
+3. **Flip on + roll.** Set `onboarding_provisioning_real = true` in `dev.tfvars`, re-run `infra` + approve
+   (this sets `EOP_PROVISIONING_ONBOARDING_SIMULATE=false` on the task and rolls it). The GraphProvisioner
+   also requires `WIF_ENABLED=true` (already set) since it mints over the WIF token.
+
+   > **Per-vertical flags (why):** `simulate` is split — `eop.provisioning.onboarding.simulate` and
+   > `eop.provisioning.access.simulate`. A single shared flag once crash-looped the task: flipping it to
+   > false for 4b also disabled the **access** simulator, whose real impl is 5b, leaving
+   > `AccessProvisioningService` with no `GroupMembershipProvisioner` → context init failed. So flip ONLY
+   > the vertical whose real provisioner exists AND whose Graph permission is consented. The schedulers run
+   > regardless (set in the service env), so a still-simulated vertical keeps completing.
 
 **Verify at the first real apply (the parts only provable live — log them, CR-1416-item-3 style):**
 - The `tags/any(t:t eq '…')` `$filter` on `/applications` is an **advanced query**: the provisioner sends

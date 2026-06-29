@@ -350,3 +350,32 @@ direct CRUD, no engine). Reviewed by consultant + architect; must-dos folded in.
 - Additive: `V6` migration + new `access` module + the type-scope engine tweak; no TF/consent in 5a. 57
   tests green (+10: access lifecycle/SoD/read-ABAC/removal/my-access/catalog + reaper + type-scoping).
   Real group writes + consent are 5b.
+
+## ADR-0018 — per-vertical provisioning flags (fix the shared-`simulate`-flag deploy crash)
+**Context:** activating 4b (set `eop.provisioning.simulate=false`) crash-looped the task. That single flag
+gated **both** simulators — `SimulatedProvisioner` (onboarding) **and** `SimulatedGroupProvisioner`
+(access, shipped in 5a). Flipping it false turned on the onboarding real bean (`GraphProvisioner`, exists)
+but turned **off** the access simulator whose real counterpart (5b `GroupMembershipProvisioner`) doesn't
+exist yet → `AccessProvisioningService` had an unsatisfied dependency → context init failed. The OLD task
+(`simulate=true`) kept serving, so no outage, but real provisioning never activated. **CI was green because
+tests run with the `matchIfMissing=true` simulated defaults — `simulate=false` wiring is only exercised on
+a real deploy.** (Architect caught it on the live apply.)
+**Decision (forward-fix):**
+- **Split `simulate` per vertical:** `eop.provisioning.onboarding.simulate` and
+  `eop.provisioning.access.simulate`; each vertical's simulator/real-provisioner keys on its own flag. A
+  vertical whose real impl doesn't exist stays simulated (wired) regardless of the other. Same split for
+  the scheduler flag (`…onboarding.scheduler` / `…access.scheduler`) for symmetry.
+- **Schedulers run in the deployed task regardless** (set in the service env); the activation is *only* the
+  per-vertical `simulate` flip. So a still-simulated vertical keeps completing (no access-demo regression).
+- **TF:** `provisioning_real` → two independent vars `onboarding_provisioning_real` (true now, 4b) and
+  `access_provisioning_real` (false until 5b); each flips only its vertical's `EOP_PROVISIONING_*_SIMULATE`.
+- **Regression guard:** `ProvisioningWiringTest` boots the full context in the exact crashing combo
+  (onboarding `simulate=false`, access simulated; `WifAssertionService` mocked since `wif.enabled` is off in
+  tests) and asserts the right beans wire — so this class of flag-only deploy-wiring break is caught in CI,
+  not on a live apply.
+**Consequences:**
+- Forward-fix un-sticks the rollout: the new image (renamed flags) + per-vertical env → the next task boots
+  clean with onboarding real, access simulated. No rollback needed (old task kept serving meanwhile).
+- **Lesson:** a shared conditional flag across independently-activated verticals is a latent deploy trap
+  that unit/Testcontainers (simulated-default) tests can't see — boot-with-real-flag smoke tests are the
+  guard. Carry this pattern to any future vertical (audit/notify/teams).
