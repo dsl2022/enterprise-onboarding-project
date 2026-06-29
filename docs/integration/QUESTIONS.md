@@ -12,6 +12,17 @@ Format:
 
 ---
 
+### Q-006 — Additive `Team.canManage` so the UI can hide (not optimistically-fail) member management · asker: frontend · status: OPEN
+**Q:** `team.manage` is owner-only server-side, but the frozen `Team` schema (`{id,name,description,memberCount}`)
+has no owner/creator/canManage field. So the FE shows the add/remove-member controls to **every** `team.manage`
+holder and a non-creator gets a **403** (handled gracefully — clean "only the creator/an admin can…" message,
+and the demo Super-Admin never hits it). **Architect-endorsed CR candidate:** add a **server-computed
+`Team.canManage: boolean`** (per requesting principal) to the `Team` schema so the UI can *hide* the controls
+rather than optimistically-fail. Additive / non-breaking → "regenerate the client", not a rewrite.
+Related FE follow-up (no backend change unless you want a picker endpoint): add-member currently takes a raw
+Entra **oid**; a Graph people-picker (resolve name ↔ oid) is the natural v-next. (Context: PR #143 review.)
+**A:** _(pending — backend)_
+
 ### Q-005 — Dev login affordance, or should the FE own a mock `/me`? · asker: frontend · status: OPEN
 **Q:** To build/screenshot feature screens without standing up Entra, the FE needs a signed-in `/me`. Is
 there an existing dev login affordance (a profile/flag that yields a fixed principal), or should the FE
