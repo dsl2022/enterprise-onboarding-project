@@ -1,0 +1,69 @@
+<div class="page">
+  <app-page-header
+    title="Review queue"
+    subtitle="Requests awaiting a decision — onboarding and access, one queue."
+  >
+    <mat-button-toggle-group
+      actions
+      [(ngModel)]="typeFilter"
+      (change)="load()"
+      hideSingleSelectionIndicator
+      aria-label="Filter by type"
+    >
+      <mat-button-toggle value="">All</mat-button-toggle>
+      <mat-button-toggle value="onboarding">Onboarding</mat-button-toggle>
+      <mat-button-toggle value="access">Access</mat-button-toggle>
+    </mat-button-toggle-group>
+  </app-page-header>
+
+  @if (loading()) {
+    <div class="state"><mat-spinner diameter="32" /></div>
+  } @else if (error()) {
+    <div class="card-surface state error">
+      <mat-icon>error_outline</mat-icon>
+      <span>{{ error() }}</span>
+      <button mat-button (click)="load()">Retry</button>
+    </div>
+  } @else if (items().length === 0) {
+    <div class="card-surface">
+      <app-empty-state icon="fact_check" heading="Nothing to review" message="The queue is clear." />
+    </div>
+  } @else {
+    <div class="card-surface list">
+      @for (item of items(); track item.id) {
+        <div class="row">
+          <div class="info">
+            <div class="title-line">
+              <app-tone-chip [label]="typeLabel(item.kind)" tone="info" [dot]="false" />
+              <span class="title">{{ item.title }}</span>
+            </div>
+            <div class="meta text-muted">
+              Requested by <span class="requester">{{ item.requester }}</span>
+              · {{ item.submittedAt | date: 'medium' }}
+            </div>
+          </div>
+
+          @if (canDecide(item)) {
+            <div
+              class="actions"
+              [matTooltip]="isOwnRequest(item) ? 'You cannot decide your own request (separation of duties).' : ''"
+            >
+              <button mat-flat-button color="primary"
+                [disabled]="acting() !== null || isOwnRequest(item)" (click)="decide(item, 'APPROVE')">
+                Approve
+              </button>
+              <button mat-stroked-button
+                [disabled]="acting() !== null || isOwnRequest(item)" (click)="decide(item, 'REQUEST_CHANGES')">
+                Request changes
+              </button>
+              <button mat-stroked-button color="warn"
+                [disabled]="acting() !== null || isOwnRequest(item)" (click)="decide(item, 'REJECT')">
+                Reject
+              </button>
+            </div>
+          }
+        </div>
+      }
+    </div>
+  }
+</div>
