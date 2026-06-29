@@ -334,20 +334,51 @@ workflow runs end to end with `eop.provisioning.simulate=true` (default) — `PO
 `/submit` → `/decision` (APPROVE) → the worker takes it to ACTIVE with a synthetic `sim-<id>` client id.
 The provisioning scheduler is **off by default** (`eop.provisioning.scheduler` unset).
 
-**4b (real Graph provisioning) — human GA consent required:**
-1. TF (`modules/entra`) declares `Application.ReadWrite.OwnedBy` on `eop-dev-app`; apply.
+**4b (real Graph provisioning) — human GA consent required. Order is load-bearing: consent MUST precede
+the token mint** — the WIF `.default` token bakes in consented permissions at mint time and is cached, so
+a task that mints before consent lands will 403 until the cache expires. So: declare → consent → THEN
+flip the flag and roll. The flag flip is gated behind the `provisioning_real` TF var (default `false`),
+so the first apply only declares the permission.
+
+1. **Declare + apply (flag still off).** TF `modules/entra` adds `Application.ReadWrite.OwnedBy` to
+   `eop-dev-app`; `provisioning_real=false` keeps the SimulatedProvisioner in charge. Merge the 4b PR →
+   run `infra` (env=dev, approve).
 2. **Grant admin consent (Global Admin)** — Terraform/CI can't:
    ```bash
-   # Resolve the Graph app-role GUID live (never hardcode); then consent via Portal / local az / az rest.
+   # Resolve the Graph app-role GUID live (never hardcode); confirm it matches the TF default
+   # (app_readwrite_ownedby_role_id = 18a4783c-866b-4cc7-a460-3d5e5662c884), then consent.
    az ad sp show --id 00000003-0000-0000-c000-000000000000 \
      --query "appRoles[?value=='Application.ReadWrite.OwnedBy'].id" -o tsv
    ```
    The Cloud-Shell `az ad app permission admin-consent` MSI-audience bug applies (AS-BUILT §5) — use the
    Portal "Grant admin consent" button, run `az` locally, or `az rest` against `appRoleAssignments`.
-3. Set `eop.provisioning.simulate=false` and `eop.provisioning.scheduler=true` (app env), roll the image.
+   Verify the SP actually holds the role before flipping the flag:
+   ```bash
+   az ad sp show --id <entra_app_client_id> --query "appRoles" -o table   # or check oauth2PermissionGrants/appRoleAssignments
+   ```
+3. **Flip on + roll.** Set `provisioning_real = true` in `dev.tfvars`, re-run `infra` + approve (this sets
+   `EOP_PROVISIONING_SIMULATE=false` + `EOP_PROVISIONING_SCHEDULER=true` on the task and rolls it). The
+   GraphProvisioner also requires `WIF_ENABLED=true` (already set) since it mints over the WIF token.
+
+**Verify at the first real apply (the parts only provable live — log them, CR-1416-item-3 style):**
+- The `tags/any(t:t eq '…')` `$filter` on `/applications` is an **advanced query**: the provisioner sends
+  `ConsistencyLevel: eventual` + `$count=true`. Confirm the find returns 200 (not a `$filter`-not-supported
+  error) in the app logs.
+- Confirm the **list** `GET /applications?$filter` is permitted under `OwnedBy` (not just `GET /{id}`).
+- **Idempotency check:** onboard → approve → confirm an Entra app registration appears with the client id;
+  then force a re-provision (e.g. clear `external_ref` or let the reaper fire) and confirm **no second app**
+  is created (the tag find reuses the first). A duplicate would be logged as a `DUPLICATE … for tag` warning.
 
 > **Scope limit — an onboarded app is NOT yet sign-in-capable.** `Application.ReadWrite.OwnedBy` creates
 > the app **registration** (and returns the client ID) but **not a service principal**, so the onboarded
 > app cannot be used for sign-in in the tenant until an SP is created (needs `Application.ReadWrite.All`
 > or a portal step). This satisfies the contract DoD ("returns a client ID"); SP creation + secret
 > minting + `secret.rotate` (and the `registry` module) are a deliberate fast-follow.
+
+**Stuck-provisioning recovery (the reaper).** A request whose task dies mid-provision stays `PROVISIONING`;
+the worker's reaper re-claims and re-provisions it once the lease (`EOP_PROVISIONING_LEASE_SECONDS`, default
+300s — sized above worst-case provision duration) elapses, backing off exponentially (capped at
+`EOP_PROVISIONING_BACKOFF_CAP_SECONDS`, default 3600s) so a permanently-failing request doesn't loop hot.
+There is **no terminal `FAILED` state** yet (frozen enums) — a genuinely-stuck request retries forever at
+the cap and emits a `provisioning_failed` event each cycle; ops surfaces it via that event / the rising
+`provision_attempts`. A real "give up" terminal state is a future CR.

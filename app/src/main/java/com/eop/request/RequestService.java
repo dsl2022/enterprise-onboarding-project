@@ -152,16 +152,45 @@ public class RequestService {
     /**
      * Claim a request for provisioning: APPROVED → PROVISIONING via the guarded UPDATE. With ≥2 tasks,
      * exactly one poller wins (rowcount=1) and is the only one that calls Graph — the serializer is the
-     * work-lock, preventing double-provisioning.
+     * work-lock, preventing double-provisioning. {@code nextAttemptAt} arms the reaper lease (now+lease)
+     * in the same transaction, so a still-running-but-slow live worker isn't double-called before the
+     * lease — which the caller must size above worst-case provision duration — elapses.
      */
     @Transactional
-    public RequestEntity markProvisioning(UUID id) {
+    public RequestEntity markProvisioning(UUID id, Instant nextAttemptAt) {
         RequestEntity entity = load(id);
         if (entity.getStatus() != RequestStatus.APPROVED) {
             throw new ConflictException("not APPROVED: " + entity.getStatus());
         }
-        return advance(entity, RequestStatus.PROVISIONING, null, null, null, SYSTEM, null,
+        advance(entity, RequestStatus.PROVISIONING, null, null, null, SYSTEM, null,
                 "PROVISIONING", "request.provisioning");
+        requests.armProvisioningLease(id, nextAttemptAt);
+        return load(id);
+    }
+
+    /**
+     * Reaper re-claim of a request stuck in PROVISIONING (the task that claimed it died mid-provision).
+     * Guarded on version so exactly one reaper proceeds to call Graph; bumps the backoff counter and
+     * pushes the lease out by {@code nextAttemptAt} so a permanently-failing request backs off instead of
+     * looping hot. Stays in PROVISIONING (find-or-create makes the re-provision idempotent — no duplicate,
+     * and the guarded markProvisioned keeps a single ACTIVE).
+     */
+    @Transactional
+    public RequestEntity reclaimStaleProvisioning(UUID id, Instant nextAttemptAt) {
+        RequestEntity entity = load(id);
+        if (entity.getStatus() != RequestStatus.PROVISIONING) {
+            throw new ConflictException("not PROVISIONING: " + entity.getStatus()); // already moved on
+        }
+        int rows = requests.reclaimProvisioning(id, entity.getVersion(), nextAttemptAt, Instant.now());
+        if (rows == 0) {
+            throw new ConflictException("lost reaper re-claim race"); // another reaper took it
+        }
+        return load(id);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<RequestEntity> findStaleProvisioning(Instant now, Pageable pageable) {
+        return requests.findStaleProvisioning(now, pageable);
     }
 
     /** Complete provisioning: PROVISIONING → ACTIVE/GRANTED, persisting the external ref (e.g. client id). */

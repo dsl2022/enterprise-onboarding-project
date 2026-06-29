@@ -250,3 +250,51 @@ consultant + architect; conditions folded in.
   the transition POSTs, but the frozen per-endpoint response lists for `/submit`, `/decision`, etc. don't
   enumerate 422 (it's documented globally in the contract `info` block). Closed by a follow-up CR adding
   422 to the idempotent POSTs' response lists — a contract change, so via the change-request governance.
+
+## ADR-0016 — Phase 4b: real Entra app-registration provisioning (Graph over WIF) + the reaper
+**Context:** swap 4a's `SimulatedProvisioner` for a real Microsoft Graph write so onboarding approval
+creates an actual Entra **app registration** and records its **client ID**. Consent-gated and externally
+dependent (the half 4a isolated). The 4a workflow / idempotency / ABAC / `markProvisioning`-claim are
+unchanged; 4b adds the provisioner, the stuck-provisioning reaper, and flips the flags. Reviewed by
+consultant + architect; must-fixes folded in.
+**Decision:**
+- **`directory.GraphProvisioner`** (active when `eop.provisioning.simulate=false`, which also requires
+  `wif.enabled=true`) creates the registration via Graph `POST /applications` using the app-only token
+  from `WifAssertionService.graphToken()` — **no new credential**. Reuses v0's `GraphService` resilience
+  idiom (429/`Retry-After` backoff, opaque-403 = missing consent). `signInAudience=AzureADMyOrg`
+  (single-tenant, matches the portal). `displayName` = the onboarding app's **name**; the **requestId tag
+  is the dedup key** (never dedup on displayName — not unique).
+- **Idempotency = find-or-create keyed on the request id**, carried as `tags:["eop:requestId:{uuid}"]`
+  (architect's call over `identifierUris` — purpose-built, `$filter`-queryable, no side effects). The
+  `tags/any(...)` `$filter` is an **advanced query** → `ConsistencyLevel: eventual` + `$count=true`.
+  Three layers, strongest first: (1) **DB `external_ref` first** (worker reuses a recorded client id, no
+  Graph call); (2) **Graph tag `$filter`** fallback inside `provision`; (3) the reaper outlasts `$filter`
+  eventual-consistency lag.
+- **Find-or-create is the atomic retry unit** (architect must-fix — the within-call dup window): a create
+  whose response is lost (timeout/5xx) is NOT bare-retried; the loop **re-runs the tag find first**, so a
+  committed-but-unacked app is reused, not duplicated. Graph doesn't enforce tag uniqueness, so a `$filter`
+  match of >1 is resolved **deterministically** (earliest `createdDateTime`, tie-break `appId`) and **loudly
+  logged** (`DUPLICATE … for tag`) so a slipped-through dup stays detectable.
+- **Stuck-provisioning reaper** (architect must-fix): a request whose task died mid-provision stays
+  `PROVISIONING`; the worker re-claims and re-provisions it. **Lease** (`next_attempt_at`, armed by
+  `markProvisioning` to now+`lease-seconds`, default 300 — **sized above worst-case provision duration**)
+  stops a slow-but-alive worker being double-called; NULL = due now (fail-safe). **Exponential backoff**
+  (`provision_attempts`, capped at `backoff-cap-seconds`, default 3600) stops a permanently-failing request
+  looping hot — needed because there is no terminal `FAILED` state (frozen enums) so retry is forever. The
+  reaper re-claim is **guarded on version** (same serializer idiom) so two reapers can't both call Graph.
+  New columns via `V5`.
+- **Flag flip is TF-gated, consent-ordered:** `provisioning_real` var (default `false`) — the first apply
+  only **declares** `Application.ReadWrite.OwnedBy` on `eop-dev-app`; after a GA grants admin consent, flip
+  the var true (sets `EOP_PROVISIONING_SIMULATE=false` + `EOP_PROVISIONING_SCHEDULER=true`, rolls the task).
+  **Consent MUST precede the token mint** — the `.default` token caches consented perms at mint time, so a
+  pre-consent task 403s until the cache expires.
+**Consequences / scope limits:**
+- **Least privilege: `OwnedBy`, not `ReadWrite.All`** → a registration + client ID, **not a service
+  principal**. The onboarded app isn't sign-in-capable until an SP exists; SP + secret + `secret.rotate` +
+  `registry` remain the deliberate fast-follow / future CR (an SP needs the broader grant, withheld here).
+- **Verify-at-first-apply (only provable live, log them):** the `$filter` advanced-query headers return 200
+  (not unsupported); the **list** `GET /applications?$filter` is permitted under `OwnedBy`; a forced
+  re-provision creates **no second app**. (CR-1416-item-3 style.)
+- Additive + one TF change (entra permission + service env toggle) + `V5` migration. 47 tests green (+7:
+  GraphProvisioner find-hit/miss/429/403/duplicate against a mocked Graph; reaper recovery + backoff).
+  Real end-to-end is the post-merge apply + GA consent + manual verify (like v0 Flow-2).

@@ -30,6 +30,12 @@ resource "azuread_application" "app" {
       id   = var.group_read_all_role_id # Group.Read.All
       type = "Role"                     # application permission
     }
+    # Phase 4b: create app registrations for onboarding (find-or-create over the WIF token). OwnedBy, not
+    # ReadWrite.All — least privilege; yields a registration + client id, not a service principal.
+    resource_access {
+      id   = var.app_readwrite_ownedby_role_id # Application.ReadWrite.OwnedBy
+      type = "Role"                            # application permission
+    }
   }
 
   dynamic "app_role" {

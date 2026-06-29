@@ -125,4 +125,8 @@ module "service" {
   app_url             = module.edge.app_url
   entra_client_secret = module.entra.client_secret_value
   create_flow1_secret = true
+
+  # Phase 4b: real Entra app-registration provisioning. Keep false for the FIRST apply (which only
+  # declares Application.ReadWrite.OwnedBy); flip true after a Global Admin grants admin consent.
+  provisioning_real = var.provisioning_real
 }

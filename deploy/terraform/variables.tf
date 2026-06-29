@@ -46,3 +46,9 @@ variable "entra_app_role_assignments" {
   }))
   default = []
 }
+
+variable "provisioning_real" {
+  description = "Phase 4b: enable real Entra app-registration provisioning. Keep false for the first apply (declares Application.ReadWrite.OwnedBy only); flip true after a Global Admin grants admin consent."
+  type        = bool
+  default     = false
+}

@@ -50,6 +50,48 @@ public interface RequestRepository extends JpaRepository<RequestEntity, UUID> {
             @Param("payload") String payload,
             @Param("now") Instant now);
 
+    /**
+     * Arm the provisioning lease on a fresh APPROVED→PROVISIONING claim (4b): set next_attempt_at to
+     * now+lease and reset the backoff counter. Touches only the reaper columns (no status/version change)
+     * — it runs in the same transaction as the guarded claim, so it's atomic with it.
+     */
+    @Modifying(clearAutomatically = true)
+    @Query("""
+            UPDATE RequestEntity r
+               SET r.nextAttemptAt = :nextAttemptAt, r.provisionAttempts = 0
+             WHERE r.id = :id
+            """)
+    int armProvisioningLease(@Param("id") UUID id, @Param("nextAttemptAt") Instant nextAttemptAt);
+
+    /**
+     * Guarded reaper re-claim (4b): one reaper wins a stale PROVISIONING row. Bumps version (so a second
+     * reaper's stale-version re-claim fails → only one calls Graph), increments the backoff counter, and
+     * pushes next_attempt_at out. Status stays PROVISIONING.
+     */
+    @Modifying(clearAutomatically = true)
+    @Query("""
+            UPDATE RequestEntity r
+               SET r.version = r.version + 1,
+                   r.provisionAttempts = r.provisionAttempts + 1,
+                   r.nextAttemptAt = :nextAttemptAt,
+                   r.updatedAt = :now
+             WHERE r.id = :id
+               AND r.status = com.eop.request.RequestStatus.PROVISIONING
+               AND r.version = :expectedVersion
+            """)
+    int reclaimProvisioning(@Param("id") UUID id,
+            @Param("expectedVersion") int expectedVersion,
+            @Param("nextAttemptAt") Instant nextAttemptAt,
+            @Param("now") Instant now);
+
+    /** Reaper scan: rows stuck in PROVISIONING whose lease/backoff has elapsed (NULL = due now). */
+    @Query("""
+            SELECT r FROM RequestEntity r
+             WHERE r.status = com.eop.request.RequestStatus.PROVISIONING
+               AND (r.nextAttemptAt IS NULL OR r.nextAttemptAt <= :now)
+            """)
+    Page<RequestEntity> findStaleProvisioning(@Param("now") Instant now, Pageable pageable);
+
     /** Role-scoped list: optional requester (ABAC own-scope) and optional status filters. */
     @Query("""
             SELECT r FROM RequestEntity r

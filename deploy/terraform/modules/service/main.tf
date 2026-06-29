@@ -89,7 +89,7 @@ resource "aws_ecs_task_definition" "app" {
       image        = var.app_image
       essential    = true
       portMappings = [{ containerPort = var.container_port, protocol = "tcp" }]
-      environment = [
+      environment = concat([
         { name = "SPRING_PROFILES_ACTIVE", value = "auth,data" },
         { name = "WIF_ENABLED", value = "true" },
         { name = "WIF_ISSUER_HOST", value = var.wif_issuer_host },
@@ -107,7 +107,14 @@ resource "aws_ecs_task_definition" "app" {
         { name = "DB_NAME", value = var.db_name },
         { name = "REDIS_HOST", value = var.redis_host },
         { name = "REDIS_PORT", value = tostring(var.redis_port) },
-      ]
+        ],
+        # Phase 4b: real Entra app-registration provisioning. Off by default (SimulatedProvisioner stays in
+        # charge → no Graph call) so this can be flipped ONLY AFTER a Global Admin grants admin consent for
+        # Application.ReadWrite.OwnedBy — a token minted before consent would 403 until its cache expires.
+        var.provisioning_real ? [
+          { name = "EOP_PROVISIONING_SIMULATE", value = "false" },
+          { name = "EOP_PROVISIONING_SCHEDULER", value = "true" },
+      ] : [])
       secrets = [
         { name = "ENTRA_CLIENT_SECRET", valueFrom = aws_secretsmanager_secret.flow1.arn },
         # DB creds pulled from the RDS-managed secret JSON by key (ECS supports the :json-key:: suffix).
