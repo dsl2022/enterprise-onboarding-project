@@ -84,13 +84,19 @@ public interface RequestRepository extends JpaRepository<RequestEntity, UUID> {
             @Param("nextAttemptAt") Instant nextAttemptAt,
             @Param("now") Instant now);
 
-    /** Reaper scan: rows stuck in PROVISIONING whose lease/backoff has elapsed (NULL = due now). */
+    /**
+     * Reaper scan: rows of one TYPE stuck in PROVISIONING whose lease/backoff has elapsed (NULL = due now).
+     * Type-scoped so the onboarding worker never reaps an access row (it would try to create an app
+     * registration for it) and vice versa.
+     */
     @Query("""
             SELECT r FROM RequestEntity r
-             WHERE r.status = com.eop.request.RequestStatus.PROVISIONING
+             WHERE r.type = :type
+               AND r.status = com.eop.request.RequestStatus.PROVISIONING
                AND (r.nextAttemptAt IS NULL OR r.nextAttemptAt <= :now)
             """)
-    Page<RequestEntity> findStaleProvisioning(@Param("now") Instant now, Pageable pageable);
+    Page<RequestEntity> findStaleProvisioning(@Param("type") RequestType type,
+            @Param("now") Instant now, Pageable pageable);
 
     /** Role-scoped list: optional requester (ABAC own-scope) and optional status filters. */
     @Query("""

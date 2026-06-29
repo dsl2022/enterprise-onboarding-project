@@ -298,3 +298,50 @@ consultant + architect; must-fixes folded in.
 - Additive + one TF change (entra permission + service env toggle) + `V5` migration. 47 tests green (+7:
   GraphProvisioner find-hit/miss/429/403/duplicate against a mocked Graph; reaper recovery + backoff).
   Real end-to-end is the post-merge apply + GA consent + manual verify (like v0 Flow-2).
+
+## ADR-0017 — Phase 5a: access governance core (catalog, requests, my-access, removal) + simulated group provisioning
+**Context:** the second vertical over the 3b engine — self-service access governance. Reuses the engine
+(`RequestType.ACCESS` already auto-advances create → UNDER_REVIEW; `provisionedStatus=GRANTED`), the
+frozen RBAC matrix (all access permissions already in `RolePermissions`), and the 4b provisioner-port +
+reaper/backoff. Split (mirrors 4a/4b): **5a** = contract-complete, simulated provisioning, no consent;
+**5b** = real `GroupMember.ReadWrite.All` group writes (consent-gated); **5c** = teams (separate slice —
+direct CRUD, no engine). Reviewed by consultant + architect; must-dos folded in.
+**Decision:**
+- **`access` type-module over the engine** (mirrors `onboarding`): `AccessController` →
+  `/catalog*`, `/access-requests*`, `/my-access*`. Create validates the catalog resource, denormalizes
+  `resourceName`/`mappedGroup`/`risk` into the engine payload (`kind=grant`), and `engine.create(ACCESS)`
+  (auto-advances to UNDER_REVIEW — no separate submit). Decision routes to `engine.decide` (ACCESS_DECIDE
+  + **SoD on the real principal** + If-Match). **Read ABAC at the controller** (engine reads unguarded);
+  `access.read` `✔(own)` → owners see only their own. `Idempotency-Key` via `platform.IdempotencyService`.
+- **`access_grant` projection (`V6`) is the source of truth for "currently held"** (`removed_at IS NULL`),
+  **NOT** the request status — a removal request ends in `GRANTED`-meaning-"completed" (frozen enums have
+  no `REMOVED` state). `GET /my-access` reads it. A partial-unique index enforces at-most-one active grant
+  per (user, resource).
+- **Atomic completion** (architect must-fix): `AccessGrantService` (a SEPARATE bean so the `@Transactional`
+  proxy applies) wraps `engine.markProvisioned` (request schema) + the `access_grant` write (access schema)
+  in ONE transaction — no GRANTED-without-/my-access drift. The Graph/simulated call happens in the worker
+  BEFORE the tx.
+- **`expires_at` persisted (= `granted_at` + `duration`), NOT enforced** (architect must-do): duration is
+  **informational in v1**; persisting `expires_at` now makes the future expiry sweep a pure add (no
+  migration) — [[CR-20260628-2240]].
+- **Type-scoped worker/reaper** (architect must-fix): `findStaleProvisioning` (+ the APPROVED poll) now
+  take a `RequestType`, and `AccessProvisioningService` mirrors onboarding's worker but scoped to ACCESS —
+  so the onboarding worker never reaps an access row (it would try to register an app for it) and vice
+  versa. Same guarded claim + lease + exponential backoff.
+- **`directory.GroupMembershipProvisioner` port** + `SimulatedGroupProvisioner` (default-on → synthetic
+  grant ref, no Graph, no consent); the worker branches on `kind` (grant=addMember, removal=removeMember).
+  5b adds the real Graph impl, idempotent by **specific** error code (add→already-exists→ok,
+  remove→not-member→ok; bad-group-id 400 still surfaces).
+- **Catalog is read-only** (`V6` table + dev seed); management is a future admin CR (forced by the freeze —
+  only `GET /catalog*` exists). `mappedGroup`s are placeholders in 5a; 5b binds them to manually-created
+  Entra group object ids.
+**Consequences / scope limits / CR candidates:**
+- **Access `REQUEST_CHANGES` dead-ends** — no `/access-requests/{id}/submit` in the freeze; v1 = "open a new
+  request" ([[CR-20260628-2235]]).
+- `kind` filter on `GET /access-requests` is applied **in-memory** on the page (kind lives in the payload,
+  not a column) — minor pagination imprecision, acceptable at v1 dev scale.
+- Known matrix gaps unchanged: no lean requester role; `ROLE`/`TEAM` catalog = governance groups not
+  portal-role elevation; approvers can't swap role/scope at decision (frozen `Decision` enum).
+- Additive: `V6` migration + new `access` module + the type-scope engine tweak; no TF/consent in 5a. 57
+  tests green (+10: access lifecycle/SoD/read-ABAC/removal/my-access/catalog + reaper + type-scoping).
+  Real group writes + consent are 5b.

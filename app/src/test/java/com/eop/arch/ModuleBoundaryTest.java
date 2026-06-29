@@ -46,13 +46,14 @@ class ModuleBoundaryTest {
     /**
      * Only the type modules ({@code onboarding}, {@code review}, and Phase-5 {@code access}) may use the
      * request engine — so a future module can't read requests raw and bypass the controller-layer read
-     * ABAC. Add {@code access} here when Phase 5 lands.
+     * ABAC. {@code access} added in Phase 5.
      */
     @ArchTest
     static final ArchRule only_type_modules_use_the_request_engine =
             classes().that().resideInAPackage("com.eop.request..")
                     .should().onlyHaveDependentClassesThat()
-                    .resideInAnyPackage("com.eop.request..", "com.eop.onboarding..", "com.eop.review..");
+                    .resideInAnyPackage("com.eop.request..", "com.eop.onboarding..", "com.eop.review..",
+                            "com.eop.access..");
 
     /** {@code onboarding} drives the engine + provisions via the directory port; no other module. */
     @ArchTest
@@ -60,6 +61,15 @@ class ModuleBoundaryTest {
             classes().that().resideInAPackage("com.eop.onboarding..")
                     .should().onlyDependOnClassesThat()
                     .resideInAnyPackage("com.eop.onboarding..", "com.eop.request..", "com.eop.authz..",
+                            "com.eop.platform..", "com.eop.directory..", "java..", "jakarta..",
+                            "org.springframework..", "org.slf4j..", "com.fasterxml..");
+
+    /** {@code access} drives the engine + provisions via the directory port; same allowlist as onboarding. */
+    @ArchTest
+    static final ArchRule access_module_boundary =
+            classes().that().resideInAPackage("com.eop.access..")
+                    .should().onlyDependOnClassesThat()
+                    .resideInAnyPackage("com.eop.access..", "com.eop.request..", "com.eop.authz..",
                             "com.eop.platform..", "com.eop.directory..", "java..", "jakarta..",
                             "org.springframework..", "org.slf4j..", "com.fasterxml..");
 
