@@ -5,16 +5,14 @@ import { Permission } from './permissions';
 
 /**
  * Gate that requires a signed-in session. Resolves the one-time `/me` probe; if
- * there's no session it kicks off the BFF login redirect and blocks the route.
+ * there's no session it sends the user to the login screen (which starts the BFF
+ * → Entra redirect in prod, or the dev sign-in when mocking).
  */
 export const authGuard: CanActivateFn = async () => {
   const auth = inject(AuthService);
+  const router = inject(Router);
   const me = await auth.ensureLoaded();
-  if (me) {
-    return true;
-  }
-  auth.login();
-  return false;
+  return me ? true : router.parseUrl('/login');
 };
 
 /**
@@ -27,8 +25,7 @@ export function permissionGuard(permission: Permission): CanActivateFn {
     const router = inject(Router);
     const me = await auth.ensureLoaded();
     if (!me) {
-      auth.login();
-      return false;
+      return router.parseUrl('/login');
     }
     return auth.can(permission) ? true : router.parseUrl('/dashboard');
   };

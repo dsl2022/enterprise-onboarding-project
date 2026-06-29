@@ -1,10 +1,12 @@
 import { HttpClient } from '@angular/common/http';
 import { computed, inject, Injectable, signal } from '@angular/core';
 import { DOCUMENT } from '@angular/common';
+import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { API_BASE, LOGIN_URL, LOGOUT_URL } from '../api/api.config';
 import { ImpersonationRequest, Me, Role } from '../api/models';
 import { ProblemError } from '../http/problem';
+import { environment } from '../../../environments/environment';
 import { Permission, permissionsFor } from './permissions';
 
 /**
@@ -36,6 +38,7 @@ export function effectiveRoles(me: Me | null): Role[] {
 export class AuthService {
   private readonly http = inject(HttpClient);
   private readonly doc = inject(DOCUMENT);
+  private readonly router = inject(Router);
 
   private readonly _me = signal<Me | null>(null);
   private readonly _loaded = signal(false);
@@ -100,12 +103,36 @@ export class AuthService {
     await this.refresh();
   }
 
-  // ---- Session navigation (full-page) --------------------------------------
+  // ---- Session navigation --------------------------------------------------
 
+  /** Real mode: full-page redirect to the BFF → Entra. */
   login(): void {
     this.doc.defaultView!.location.href = LOGIN_URL;
   }
+
   logout(): void {
+    if (environment.useMockMe) {
+      // No backend in dev: clear the mock session and show the login screen.
+      const ls = this.doc.defaultView?.localStorage;
+      ls?.removeItem('eop.mockSignedIn');
+      ls?.removeItem('eop.mockImpersonate');
+      this._me.set(null);
+      this.loadOnce = null;
+      void this.router.navigateByUrl('/login');
+      return;
+    }
     this.doc.defaultView!.location.href = LOGOUT_URL;
+  }
+
+  /** Dev-only sign-in used by the login screen when `useMockMe` is on. */
+  async mockSignIn(role?: Role): Promise<void> {
+    const ls = this.doc.defaultView?.localStorage;
+    ls?.setItem('eop.mockSignedIn', 'true');
+    if (role) {
+      ls?.setItem('eop.mockRole', role);
+    }
+    this.loadOnce = null;
+    await this.ensureLoaded();
+    void this.router.navigateByUrl('/dashboard');
   }
 }

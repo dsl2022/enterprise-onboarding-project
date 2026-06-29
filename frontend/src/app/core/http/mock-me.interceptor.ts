@@ -1,9 +1,10 @@
 import { HttpInterceptorFn, HttpResponse } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { DOCUMENT } from '@angular/common';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { API_BASE } from '../api/api.config';
 import { ImpersonationRequest, Me, Role } from '../api/models';
+import { ProblemError } from './problem';
 
 /**
  * DEV-ONLY mock for identity. Lets you browse the shell + exercise role-aware UI
@@ -31,6 +32,13 @@ export const mockMeInterceptor: HttpInterceptorFn = (req, next) => {
   const path = req.url.split('?')[0];
 
   if (path === `${API_BASE}/me` && req.method === 'GET') {
+    // Start signed-out (like a real first visit) until the dev login sets the flag;
+    // a 401 here mirrors the real BFF and routes to the login screen.
+    if (storage?.getItem('eop.mockSignedIn') !== 'true') {
+      return throwError(
+        () => new ProblemError(401, { status: 401, title: 'Unauthorized', detail: 'Mock: signed out' }),
+      );
+    }
     return of(new HttpResponse({ status: 200, body: buildMe(storage) }));
   }
 
