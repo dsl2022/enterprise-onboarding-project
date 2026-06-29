@@ -38,17 +38,48 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   flex: 0 0 auto;
   border-radius: 50%;
   background: var(--surface-sunken);
   color: var(--text-subtle);
-  font-size: 13px;
 }
 
-.uid {
-  font-size: 13px;
+.avatar mat-icon {
+  font-size: 19px;
+  width: 19px;
+  height: 19px;
+}
+
+.member-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.member-name {
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.you-tag {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--primary);
+  background: var(--status-info-bg);
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+}
+
+.member-sub {
+  font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
