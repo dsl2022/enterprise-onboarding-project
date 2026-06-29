@@ -57,12 +57,22 @@ jobs:
       - name: Resolve targets from SSM (written by Terraform)
         id: targets
         run: |
-          BUCKET=$(aws ssm get-parameter --name "/eop/${ENV}/webapp_bucket" --query Parameter.Value --output text)
-          DIST=$(aws ssm get-parameter --name "/eop/${ENV}/app_distribution_id" --query Parameter.Value --output text)
-          echo "bucket=$BUCKET" >> "$GITHUB_OUTPUT"
-          echo "dist=$DIST" >> "$GITHUB_OUTPUT"
+          # The SSM pointers only exist once `infra` has been applied. If they're
+          # missing (e.g. this merge triggered the deploy before the gated infra
+          # apply was approved), skip cleanly instead of failing the build.
+          BUCKET=$(aws ssm get-parameter --name "/eop/${ENV}/webapp_bucket" --query Parameter.Value --output text 2>/dev/null || true)
+          DIST=$(aws ssm get-parameter --name "/eop/${ENV}/app_distribution_id" --query Parameter.Value --output text 2>/dev/null || true)
+          if [ -z "$BUCKET" ] || [ -z "$DIST" ]; then
+            echo "::warning::SSM targets not found — infra isn't applied yet. Run the 'infra' workflow (env=dev) and approve, then re-run this job. Skipping the sync."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            echo "bucket=$BUCKET" >> "$GITHUB_OUTPUT"
+            echo "dist=$DIST" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Sync build to S3 (under the app/ prefix)
+        if: steps.targets.outputs.ready == 'true'
         run: |
           # Hashed assets: cache forever. index.html: never cache (points at hashed assets).
           aws s3 sync dist/frontend/browser "s3://${{ steps.targets.outputs.bucket }}/app" \
@@ -73,6 +83,7 @@ jobs:
             --cache-control "no-cache"
 
       - name: Invalidate /app on CloudFront
+        if: steps.targets.outputs.ready == 'true'
         run: |
           aws cloudfront create-invalidation \
             --distribution-id "${{ steps.targets.outputs.dist }}" \
