@@ -418,3 +418,41 @@ TF var) shipped in 5a + the flag-fix. Reviewed (Phase 5 + 5b note); architect mu
 - Real end-to-end is the post-merge apply + GA consent + seed-and-watch (grant → in group → /my-access;
   removal → out of group → `removed_at`, request status GRANTED-means-completed), mirroring the 4b sign-off.
 - Additive: one new provisioner + TF permission + tests; the access machine is unchanged. Build green.
+
+## ADR-0020 — Phase 5c: teams (portal-local CRUD; group-backing deferred); ABAC team-delegation
+**Context:** the `/teams*` surface — create teams, manage membership, soft-delete (audited). Architect
+routing CR-20260629-0723 (Accepted). Teams are a different shape from onboarding/access: **direct CRUD, no
+request engine** (no approval/SoD/provisioning lifecycle).
+**Decision:**
+- **Option A — portal-local teams.** Teams + members are DB rows (`teams` schema, `V7`); member add/remove
+  is soft-delete. **No Graph, no new consent.** (B) full Entra-group-backed teams is **deferred** —
+  `POST /teams` creating a group needs the broad `Group.ReadWrite.All`, withheld on least-privilege. (C)
+  optional group reflection is **deferred to ride the Phase 6 outbox relay** — its cost is dual-write
+  consistency, not consent, so the right shape is `team.member.added/removed` event → Phase 6 relay →
+  `GroupMembershipProvisioner` (reusing 5b's grant), not a synchronous Graph call in `TeamService`.
+- **`teams` module depends only on `authz` + `platform`** — never `request` (ArchUnit `teams_module_boundary`,
+  Pin D). No engine.
+- **ABAC: `TeamEntity implements Ownable`** — `ownerId()`=creator oid, `teamMemberIds()`=active member oids
+  (loaded by the service). So `team.read`/`team.manage(own)` = **creator OR active member** (closes the
+  "member can't see their own team" gap). Consequence: an active member who independently holds
+  `team.manage` (APPLICATION_OWNER) co-manages the team — a deliberate ownership-delegation surface
+  (documented in `rbac-matrix.md`).
+- **Pin A — co-ownership is `TeamEntity`-only in v1.** `Application.team[]` lives in the request payload,
+  and `RequestEntity` deliberately keeps the empty `teamMemberIds()` default (the engine never parses
+  payload for ABAC). So onboarding apps get **no** team co-ownership yet (regression-guarded). Wiring it is
+  the deferred **Pin B** `TeamMembershipResolver` port (defined in `authz`, implemented in `teams`,
+  `@ConditionalOnMissingBean` no-op default) — the only boundary-legal shape, built when `team` is promoted
+  to a first-class column.
+- **Audit now, Phase 6 consumes (Pin C):** `OutboxWriter.append` with aggregateType `team`, event types
+  `team.created`/`team.member.added`/`team.member.removed`, payload `{teamId,userId,actorId,occurredAt}` —
+  frozen so the Phase 6 relay needn't re-rev. Same single-writer outbox the engine uses.
+- **Idempotency:** the `(team_id,user_id) WHERE removed_at IS NULL` partial unique index makes add/reactivate
+  the atomic unit (idempotent even without the key); `Idempotency-Key` is claim-first dedup on top. Re-add
+  reactivates the row (history lives in the outbox events). Name is tenant-unique → 409.
+**Consequences / scope notes:**
+- **No `DELETE /teams/{id}` in the frozen contract** — only member soft-delete. So there is intentionally
+  **no `teams.deleted_at`/cascade** (CR §3's premise); team deletion would be a contract CR (deferred). No
+  dead schema added.
+- `TeamMember.name` (display name) isn't resolved in v1 portal-local teams (no directory lookup) — returned
+  null; the frontend resolves names separately.
+- Additive: `V7` + new `teams` module; no infra/consent. Contract untouched (Spectral green).
