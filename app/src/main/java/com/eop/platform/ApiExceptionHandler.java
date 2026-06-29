@@ -46,6 +46,13 @@ public class ApiExceptionHandler {
         return withCorrelation(problem);
     }
 
+    @ExceptionHandler(UnprocessableException.class)
+    public ProblemDetail handleUnprocessable(UnprocessableException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage());
+        problem.setTitle("Unprocessable Entity");
+        return withCorrelation(problem);
+    }
+
     private ProblemDetail withCorrelation(ProblemDetail problem) {
         problem.setProperty("correlationId", MDC.get(CorrelationIdFilter.MDC_KEY));
         return problem;

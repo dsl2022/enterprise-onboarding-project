@@ -42,4 +42,31 @@ class ModuleBoundaryTest {
                     .resideInAnyPackage("com.eop.request..", "com.eop.authz..", "com.eop.platform..",
                             "java..", "jakarta..", "org.springframework..", "org.hibernate..",
                             "com.fasterxml..");
+
+    /**
+     * Only the type modules ({@code onboarding}, {@code review}, and Phase-5 {@code access}) may use the
+     * request engine — so a future module can't read requests raw and bypass the controller-layer read
+     * ABAC. Add {@code access} here when Phase 5 lands.
+     */
+    @ArchTest
+    static final ArchRule only_type_modules_use_the_request_engine =
+            classes().that().resideInAPackage("com.eop.request..")
+                    .should().onlyHaveDependentClassesThat()
+                    .resideInAnyPackage("com.eop.request..", "com.eop.onboarding..", "com.eop.review..");
+
+    /** {@code onboarding} drives the engine + provisions via the directory port; no other module. */
+    @ArchTest
+    static final ArchRule onboarding_module_boundary =
+            classes().that().resideInAPackage("com.eop.onboarding..")
+                    .should().onlyDependOnClassesThat()
+                    .resideInAnyPackage("com.eop.onboarding..", "com.eop.request..", "com.eop.authz..",
+                            "com.eop.platform..", "com.eop.directory..", "java..", "jakarta..",
+                            "org.springframework..", "com.fasterxml..");
+
+    /** {@code directory} is a leaf provisioning port — it depends on no other eop module. */
+    @ArchTest
+    static final ArchRule directory_is_a_leaf_port =
+            classes().that().resideInAPackage("com.eop.directory..")
+                    .should().onlyDependOnClassesThat()
+                    .resideInAnyPackage("com.eop.directory..", "java..", "org.slf4j..", "org.springframework..");
 }

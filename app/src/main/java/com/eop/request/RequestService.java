@@ -13,6 +13,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -96,6 +98,53 @@ public class RequestService {
         String role = authz.displayRole(principal.effectiveRoles()).name();
         return advance(entity, to, principal.realUserId(), reason, null,
                 principal.realUserId(), role, "DECISION_" + decision, "request." + to.name().toLowerCase());
+    }
+
+    /**
+     * Edit the payload of a still-being-authored request (PATCH). The caller passes the already-merged
+     * payload (merge + immutable fields are the type module's concern). Same authorize-before-state
+     * ordering as a transition: load → 403 → 412 → legal-status → guarded version bump (status unchanged).
+     */
+    @Transactional
+    public RequestEntity updatePayload(CurrentPrincipal principal, UUID id, String mergedPayloadJson,
+            Integer ifMatchVersion) {
+        RequestEntity entity = load(id);
+        if (entity.getType() != RequestType.ONBOARDING) {
+            throw new ConflictException("payload edit not supported for " + entity.getType());
+        }
+        authz.require(principal, Permission.APP_UPDATE, entity); // 403 — permission + ABAC ownership
+        checkIfMatch(ifMatchVersion, entity);                    // 412
+        if (!RequestTransitions.canEditFrom(entity.getStatus())) {
+            throw new ConflictException("cannot edit in " + entity.getStatus()); // 409
+        }
+        int rows = requests.guardedPayloadUpdate(id, entity.getStatus(), entity.getVersion(),
+                mergedPayloadJson, Instant.now());
+        if (rows == 0) {
+            RequestEntity current = requests.findById(id)
+                    .orElseThrow(() -> new NotFoundException("request " + id + " not found"));
+            if (current.getStatus() != entity.getStatus()) {
+                throw new ConflictException("state changed to " + current.getStatus());
+            }
+            throw new PreconditionFailedException("version changed");
+        }
+        recordEvent(id, entity.getStatus(), entity.getStatus(), "UPDATED", principal.realUserId(),
+                authz.displayRole(principal.effectiveRoles()).name(), null);
+        RequestEntity updated = requests.findById(id).orElseThrow();
+        emit(updated, "request.updated");
+        return updated;
+    }
+
+    // ---- reads (UNGUARDED engine primitives — controllers enforce read ABAC, see get/timeline note) ----
+
+    @Transactional(readOnly = true)
+    public Page<RequestEntity> list(RequestType type, String requesterOrNull, RequestStatus statusOrNull,
+            Pageable pageable) {
+        return requests.listByType(type, requesterOrNull, statusOrNull, pageable);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<RequestEntity> underReview(RequestType typeOrNull, Pageable pageable) {
+        return requests.findUnderReview(typeOrNull, pageable);
     }
 
     // ---- provisioning: called by the Phase 4/5 worker (system actor) ----
