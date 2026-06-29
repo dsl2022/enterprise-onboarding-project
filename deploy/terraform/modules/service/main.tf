@@ -117,6 +117,10 @@ resource "aws_ecs_task_definition" "app" {
         # consent gate (audit is internal, no external side effect). With ≥2 tasks each runs the tick, but the
         # relay's Postgres advisory lock means only one is the leader and writes the (linear) hash chain.
         { name = "EOP_RELAY_SCHEDULER", value = "true" },
+        # Phase 6b: the outbox→notification consumer (in-app feed). Also always-on, no consent gate (the
+        # in-app feed has no external side effect; SES email is a deferred, separately-gated follow-up). It's
+        # a SEPARATE consumer from the audit relay (SKIP LOCKED fan-out) so notify can never stall audit.
+        { name = "EOP_NOTIFY_SCHEDULER", value = "true" },
         ],
         # Onboarding real (4b): flip ONLY AFTER Application.ReadWrite.OwnedBy is admin-consented (a token
         # minted before consent would 403 until its cache expires).
