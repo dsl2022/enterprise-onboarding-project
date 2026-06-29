@@ -1,0 +1,80 @@
+<div class="page narrow">
+  <app-page-header
+    title="New application"
+    subtitle="Register an internal app for SSO. It starts as a draft you can refine before submitting."
+  />
+
+  <form class="card-surface form" [formGroup]="form" (ngSubmit)="save(true)">
+    @if (error()) {
+      <div class="form-error">
+        <mat-icon>error_outline</mat-icon>
+        <span>{{ error() }}</span>
+      </div>
+    }
+
+    <div class="row two">
+      <mat-form-field appearance="outline">
+        <mat-label>Name</mat-label>
+        <input matInput formControlName="name" placeholder="billing-portal" required />
+        <mat-hint>Immutable after creation.</mat-hint>
+        @if (form.controls.name.touched && form.controls.name.invalid) {
+          <mat-error>Name is required.</mat-error>
+        }
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Environment</mat-label>
+        <mat-select formControlName="env">
+          <mat-option value="dev">dev</mat-option>
+          <mat-option value="staging">staging</mat-option>
+          <mat-option value="prod">prod</mat-option>
+        </mat-select>
+        <mat-hint>Immutable after creation.</mat-hint>
+      </mat-form-field>
+    </div>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Description</mat-label>
+      <textarea matInput formControlName="description" rows="2"></textarea>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Grant types</mat-label>
+      <mat-select formControlName="grants" multiple>
+        @for (g of grantTypes; track g) {
+          <mat-option [value]="g">{{ g }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Redirect URIs</mat-label>
+      <textarea matInput formControlName="urisText" rows="2"
+        placeholder="https://app.example.com/callback (one per line)"></textarea>
+      <mat-hint>One per line or comma-separated.</mat-hint>
+    </mat-form-field>
+
+    <div class="row two">
+      <mat-form-field appearance="outline">
+        <mat-label>Scopes</mat-label>
+        <input matInput formControlName="scopesText" placeholder="openid, profile, email" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Owning group</mat-label>
+        <input matInput formControlName="group" />
+      </mat-form-field>
+    </div>
+
+    <div class="actions">
+      <button type="button" mat-button [disabled]="submitting()" (click)="cancel()">Cancel</button>
+      <span class="flex-spacer"></span>
+      <button type="button" mat-stroked-button [disabled]="submitting()" (click)="save(false)">
+        Save draft
+      </button>
+      <button type="submit" mat-flat-button color="primary" [disabled]="submitting()">
+        {{ submitting() ? 'Working…' : 'Create & submit' }}
+      </button>
+    </div>
+  </form>
+</div>

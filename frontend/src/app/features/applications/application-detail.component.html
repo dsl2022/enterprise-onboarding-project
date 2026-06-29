@@ -1,0 +1,95 @@
+<div class="page">
+  @if (loading()) {
+    <div class="state"><mat-spinner diameter="32" /></div>
+  } @else if (error()) {
+    <div class="card-surface state error">
+      <mat-icon>error_outline</mat-icon>
+      <span>{{ error() }}</span>
+    </div>
+  } @else {
+    @if (app(); as a) {
+    <app-page-header [title]="a.name" [subtitle]="'Environment: ' + a.env">
+      <div actions class="head-actions">
+        <app-status-chip [status]="a.status" />
+
+        @if (canSubmit()) {
+          <button mat-flat-button color="primary" [disabled]="acting()" (click)="submit()">
+            <mat-icon>send</mat-icon> Submit for review
+          </button>
+        }
+
+        @if (canDecide()) {
+          <span
+            [matTooltip]="isOwnRequest() ? 'You cannot approve your own request (separation of duties).' : ''"
+          >
+            <button mat-flat-button color="primary" [disabled]="acting() || isOwnRequest()"
+              (click)="decide('APPROVE')">
+              <mat-icon>check</mat-icon> Approve
+            </button>
+          </span>
+          <button mat-stroked-button [disabled]="acting() || isOwnRequest()" (click)="decide('REQUEST_CHANGES')">
+            Request changes
+          </button>
+          <button mat-stroked-button color="warn" [disabled]="acting() || isOwnRequest()"
+            (click)="decide('REJECT')">
+            Reject
+          </button>
+        }
+      </div>
+    </app-page-header>
+
+    @if (isProvisioning()) {
+      <div class="card-surface banner">
+        <mat-spinner diameter="18" />
+        <span>Provisioning the Entra app registration… this finishes asynchronously.</span>
+      </div>
+    }
+
+    <div class="grid">
+      <section class="card-surface panel">
+        <h2>Details</h2>
+        <dl class="fields">
+          <dt>Description</dt>
+          <dd>{{ a.description || '—' }}</dd>
+          <dt>Owner</dt>
+          <dd>{{ a.owner }}</dd>
+          <dt>Team</dt>
+          <dd>{{ a.team.length ? a.team.join(', ') : '—' }}</dd>
+          <dt>Grants</dt>
+          <dd>{{ a.grants.length ? a.grants.join(', ') : '—' }}</dd>
+          <dt>Scopes</dt>
+          <dd>{{ a.scopes.length ? a.scopes.join(', ') : '—' }}</dd>
+          <dt>Redirect URIs</dt>
+          <dd>
+            @if (a.redirectUris.length) {
+              <ul class="uris">
+                @for (u of a.redirectUris; track u) {
+                  <li class="mono">{{ u }}</li>
+                }
+              </ul>
+            } @else {
+              —
+            }
+          </dd>
+          <dt>Group</dt>
+          <dd>{{ a.group || '—' }}</dd>
+          <dt>Client ID</dt>
+          <dd>
+            @if (a.clientId) {
+              <span class="mono">{{ a.clientId }}</span>
+              <span class="text-subtle client-note">Registration only — not a sign-in-capable app in v1.</span>
+            } @else {
+              <span class="text-muted">Assigned after provisioning.</span>
+            }
+          </dd>
+        </dl>
+      </section>
+
+      <section class="card-surface panel">
+        <h2>Lifecycle</h2>
+        <app-lifecycle-timeline [entries]="timeline()" />
+      </section>
+    </div>
+    }
+  }
+</div>

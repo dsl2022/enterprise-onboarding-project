@@ -1,0 +1,68 @@
+<div class="page">
+  <app-page-header
+    title="Applications"
+    subtitle="Internal apps registered for SSO. Track each through approval and provisioning."
+  >
+    @if (auth.can('app.create')) {
+      <a actions mat-flat-button color="primary" routerLink="/applications/new">
+        <mat-icon>add</mat-icon>
+        New application
+      </a>
+    }
+  </app-page-header>
+
+  @if (loading()) {
+    <div class="state"><mat-spinner diameter="32" /></div>
+  } @else if (error()) {
+    <div class="card-surface state error">
+      <mat-icon>error_outline</mat-icon>
+      <span>{{ error() }}</span>
+      <button mat-button (click)="load()">Retry</button>
+    </div>
+  } @else if (apps().length === 0) {
+    <div class="card-surface">
+      <app-empty-state
+        icon="apps"
+        heading="No applications yet"
+        message="Register your first internal app for SSO to get started."
+      >
+        @if (auth.can('app.create')) {
+          <a mat-flat-button color="primary" routerLink="/applications/new">New application</a>
+        }
+      </app-empty-state>
+    </div>
+  } @else {
+    <div class="card-surface table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Environment</th>
+            <th>Status</th>
+            <th>Owner</th>
+            <th>Updated</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (app of apps(); track app.id) {
+            <tr [routerLink]="['/applications', app.id]" class="row">
+              <td class="name">{{ app.name }}</td>
+              <td><span class="mono">{{ app.env }}</span></td>
+              <td><app-status-chip [status]="app.status" /></td>
+              <td class="text-muted">{{ app.owner }}</td>
+              <td class="text-muted">{{ app.updatedAt | date: 'medium' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    @if (nextCursor()) {
+      <div class="more">
+        <button mat-stroked-button [disabled]="loadingMore()" (click)="loadMore()">
+          {{ loadingMore() ? 'Loading…' : 'Load more' }}
+        </button>
+      </div>
+    }
+  }
+</div>

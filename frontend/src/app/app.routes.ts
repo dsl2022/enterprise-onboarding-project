@@ -26,13 +26,26 @@ export const routes: Routes = [
     path: 'applications',
     canActivate: [authGuard, permissionGuard('app.read')],
     loadComponent: () =>
-      import('./features/placeholder/placeholder.component').then((m) => m.PlaceholderComponent),
-    data: {
-      title: 'Applications',
-      subtitle: 'Register internal apps for SSO and track onboarding through approval.',
-      status: 'live',
-      note: 'The onboarding list, wizard, and detail timeline build on the live /applications endpoints next.',
-    },
+      import('./features/applications/applications-list.component').then(
+        (m) => m.ApplicationsListComponent,
+      ),
+  },
+  {
+    // Must precede ':id' so "new" isn't swallowed as an id.
+    path: 'applications/new',
+    canActivate: [authGuard, permissionGuard('app.create')],
+    loadComponent: () =>
+      import('./features/applications/application-create.component').then(
+        (m) => m.ApplicationCreateComponent,
+      ),
+  },
+  {
+    path: 'applications/:id',
+    canActivate: [authGuard, permissionGuard('app.read')],
+    loadComponent: () =>
+      import('./features/applications/application-detail.component').then(
+        (m) => m.ApplicationDetailComponent,
+      ),
   },
 
   {
