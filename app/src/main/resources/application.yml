@@ -13,14 +13,20 @@ spring:
 app:
   base-url: ${APP_BASE_URL:}
 
-# Onboarding provisioning (Phase 4). `simulate` defaults true everywhere (the SimulatedProvisioner returns
-# a synthetic client id) so local + CI + tests need no Graph/consent; deployment flips it to false (env, in
-# the ECS service module) to activate the real GraphProvisioner — which also requires wif.enabled=true. The
-# scheduler is off by default (tests call runOnce() directly) and on in deployment.
+# Provisioning (Phase 4/5). `simulate` is PER VERTICAL — onboarding and access activate independently, so
+# 4b (onboarding real) can't disable the access simulator whose real impl (5b) doesn't exist yet. Each
+# simulator/real-provisioner keys on its own flag; both default true (synthetic, no Graph/consent) so
+# local + CI + tests just work. Deployment flips a vertical's `simulate` to false ONLY once its real
+# provisioner exists AND its Graph permission is admin-consented. Schedulers are also per-vertical: off by
+# default (tests call runOnce() directly), on in deployment so the workers process requests.
 eop:
   provisioning:
-    # simulate: true       # set EOP_PROVISIONING_SIMULATE=false in deployment (ECS service env)
-    # scheduler: true      # set EOP_PROVISIONING_SCHEDULER=true in deployment
+    onboarding:
+      # simulate: false    # EOP_PROVISIONING_ONBOARDING_SIMULATE=false → real GraphProvisioner (needs wif + OwnedBy consent)
+      # scheduler: true     # EOP_PROVISIONING_ONBOARDING_SCHEDULER=true in deployment
+    access:
+      # simulate: false    # EOP_PROVISIONING_ACCESS_SIMULATE=false → real group provisioning (5b; needs GroupMember.ReadWrite.All consent)
+      # scheduler: true     # EOP_PROVISIONING_ACCESS_SCHEDULER=true in deployment
     poll-ms: ${EOP_PROVISIONING_POLL_MS:10000}
     lease-seconds: ${EOP_PROVISIONING_LEASE_SECONDS:300}        # reaper lease; > worst-case provision duration
     backoff-cap-seconds: ${EOP_PROVISIONING_BACKOFF_CAP_SECONDS:3600}

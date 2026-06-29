@@ -21,9 +21,9 @@ entra_app_role_assignments = [
 # app-role assignment for sign-in.
 # entra_require_app_role_assignment = true
 
-# ---- Phase 4b: activate real Entra app-registration provisioning ----
-# Admin consent for Application.ReadWrite.OwnedBy was granted on the eop-dev-app SP (2026-06-29) — consent
-# is in place BEFORE the token mint, per the ordering rule. Flipping this true sets
-# EOP_PROVISIONING_SIMULATE=false + EOP_PROVISIONING_SCHEDULER=true, so approvals create REAL registrations.
-# Activation happens on the next gated `infra` apply (which rolls the task).
-provisioning_real = true
+# ---- Phase 4b/5b: per-vertical real provisioning ----
+# Onboarding (4b) real: Application.ReadWrite.OwnedBy was admin-consented on the eop-dev-app SP (2026-06-29),
+# consent in place BEFORE the token mint. This flips only EOP_PROVISIONING_ONBOARDING_SIMULATE=false; the
+# access vertical stays simulated (its real provisioner is 5b and GroupMember.ReadWrite.All isn't consented).
+onboarding_provisioning_real = true
+access_provisioning_real     = false

@@ -44,7 +44,7 @@ import org.springframework.web.server.ResponseStatusException;
  * the broader {@code Application.ReadWrite.All}, withheld here for least privilege).
  */
 @Component
-@ConditionalOnProperty(name = "eop.provisioning.simulate", havingValue = "false")
+@ConditionalOnProperty(name = "eop.provisioning.onboarding.simulate", havingValue = "false")
 public class GraphProvisioner implements AppRegistrationProvisioner {
 
     private static final Logger log = LoggerFactory.getLogger(GraphProvisioner.class);

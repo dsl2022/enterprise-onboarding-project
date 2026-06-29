@@ -68,11 +68,18 @@ variable "redis_port" {
   default = 6379
 }
 
-# Phase 4b: flip to true ONLY AFTER admin consent for Application.ReadWrite.OwnedBy is granted (RUNBOOK).
-# false keeps the SimulatedProvisioner active; true sets EOP_PROVISIONING_SIMULATE=false + enables the
-# scheduler so the worker provisions real Entra app registrations over the WIF token.
-variable "provisioning_real" {
-  description = "Enable real Graph app-registration provisioning (requires admin consent already granted)."
+# Per-vertical real-provisioning toggles. Each flips ONLY its vertical's `simulate` to false, and ONLY
+# after that vertical's Graph permission is admin-consented (RUNBOOK §9). They are independent so onboarding
+# (4b) can go real while access (5b) stays simulated — the shared-flag coupling that crash-looped the task
+# is gone. Schedulers run regardless (set in the service env), so a simulated vertical still completes.
+variable "onboarding_provisioning_real" {
+  description = "Real Entra app-registration provisioning (4b). Requires Application.ReadWrite.OwnedBy consent."
+  type        = bool
+  default     = false
+}
+
+variable "access_provisioning_real" {
+  description = "Real Entra group-membership provisioning (5b). Requires GroupMember.ReadWrite.All consent + the real provisioner."
   type        = bool
   default     = false
 }

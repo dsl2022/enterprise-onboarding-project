@@ -12,7 +12,7 @@ import org.springframework.stereotype.Component;
  * Graph implementation takes over when {@code eop.provisioning.simulate=false}.
  */
 @Component
-@ConditionalOnProperty(name = "eop.provisioning.simulate", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(name = "eop.provisioning.access.simulate", havingValue = "true", matchIfMissing = true)
 public class SimulatedGroupProvisioner implements GroupMembershipProvisioner {
 
     private static final Logger log = LoggerFactory.getLogger(SimulatedGroupProvisioner.class);

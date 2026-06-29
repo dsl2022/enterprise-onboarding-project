@@ -6,11 +6,11 @@ import org.springframework.stereotype.Component;
 
 /**
  * Drives {@link AccessProvisioningService#runOnce()} on a fixed delay. Off by default (tests call
- * {@code runOnce()} directly); deployment enables it with {@code eop.provisioning.scheduler=true} — the
- * same flag that enables the onboarding worker.
+ * {@code runOnce()} directly); deployment enables it with {@code eop.provisioning.access.scheduler=true}.
+ * Per-vertical (separate from the onboarding scheduler) so the two verticals activate independently.
  */
 @Component
-@ConditionalOnProperty(name = "eop.provisioning.scheduler", havingValue = "true")
+@ConditionalOnProperty(name = "eop.provisioning.access.scheduler", havingValue = "true")
 public class AccessProvisioningScheduler {
 
     private final AccessProvisioningService provisioning;
