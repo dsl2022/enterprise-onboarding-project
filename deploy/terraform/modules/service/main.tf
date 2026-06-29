@@ -113,6 +113,10 @@ resource "aws_ecs_task_definition" "app" {
         # simulator, whose real impl is 5b, → context failed to start).
         { name = "EOP_PROVISIONING_ONBOARDING_SCHEDULER", value = "true" },
         { name = "EOP_PROVISIONING_ACCESS_SCHEDULER", value = "true" },
+        # Phase 6a: the outbox→audit relay. Always-on in every environment — unlike provisioning there is NO
+        # consent gate (audit is internal, no external side effect). With ≥2 tasks each runs the tick, but the
+        # relay's Postgres advisory lock means only one is the leader and writes the (linear) hash chain.
+        { name = "EOP_RELAY_SCHEDULER", value = "true" },
         ],
         # Onboarding real (4b): flip ONLY AFTER Application.ReadWrite.OwnedBy is admin-consented (a token
         # minted before consent would 403 until its cache expires).

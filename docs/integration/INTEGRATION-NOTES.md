@@ -64,7 +64,14 @@ stored in **Redis**, carried by a **session cookie**.
 7. **`TeamMember.name` is `null` in v1** — portal-local teams store only the member's `userId` (oid); the
    display name isn't resolved (no directory lookup yet). Render from your own identity source (e.g. `/me`
    for the current user) or show the id; don't expect a populated `name`.
-8. **Teams: `team.read` is broad, `team.manage` is owner-only.** A user sees a team if they created it OR
+8. **Audit (`/audit`) is a derived, eventually-consistent log — not write-through.** A domain action (approve,
+   add member, …) appears in `/audit` only after the background relay projects it (sub-second, but not within
+   the same request). Don't poll `/audit` to confirm an action you just took succeeded — use the action's own
+   response/resource. `actor` is always the **real** principal (Super Admin even while impersonating;
+   `effectiveRole` carries the impersonated role). **`seq` is monotonic but may have gaps** — render it as an
+   id/ordering key, never as a count or "N events total". `GET /audit/verify` is a tamper-check, not a
+   data-freshness check.
+9. **Teams: `team.read` is broad, `team.manage` is owner-only.** A user sees a team if they created it OR
    are an active member (`GET /teams` is scoped that way; members can read the roster). But **only the
    creator** (or ADMIN/SUPER_ADMIN) can add/remove members — a non-creator member gets **403** on
    `POST/DELETE …/members`. Gate the "manage members" UI on being the team's creator, not just a member.

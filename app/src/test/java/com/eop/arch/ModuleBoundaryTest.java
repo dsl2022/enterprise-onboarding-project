@@ -97,4 +97,18 @@ class ModuleBoundaryTest {
                     .should().onlyDependOnClassesThat()
                     .resideInAnyPackage("com.eop.teams..", "com.eop.authz..", "com.eop.platform..",
                             "java..", "jakarta..", "org.springframework..", "com.fasterxml..");
+
+    /**
+     * {@code audit} (Phase 6a) is a projection module: it implements the platform-owned
+     * {@code OutboxEventHandler} SPI and reads/verifies its own table. It depends ONLY on {@code authz}
+     * (permission gate) + {@code platform} (the SPI, cursor codec) (+ JDK/framework), never on the domain
+     * modules — the relay inverts the dependency, so {@code platform} never depends back on {@code audit}
+     * (kept honest by {@code modules_are_free_of_cycles}).
+     */
+    @ArchTest
+    static final ArchRule audit_module_boundary =
+            classes().that().resideInAPackage("com.eop.audit..")
+                    .should().onlyDependOnClassesThat()
+                    .resideInAnyPackage("com.eop.audit..", "com.eop.authz..", "com.eop.platform..",
+                            "java..", "jakarta..", "org.springframework..", "org.slf4j..", "com.fasterxml..");
 }

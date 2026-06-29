@@ -10,6 +10,7 @@ import com.eop.platform.PreconditionFailedException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -59,7 +60,7 @@ public class RequestService {
         RequestEntity entity = new RequestEntity(UUID.randomUUID(), type, initial, requesterId, submittedById, payloadJson);
         requests.save(entity);
         recordEvent(entity.getId(), null, initial, "CREATED", submittedById, null, null);
-        emit(entity, "request.created");
+        emit(entity, "request.created", submittedById, null);
         if (type == RequestType.ACCESS) {
             return advance(entity, RequestStatus.UNDER_REVIEW, null, null, null, submittedById, null,
                     "AUTO_UNDER_REVIEW", "request.under_review");
@@ -127,10 +128,10 @@ public class RequestService {
             }
             throw new PreconditionFailedException("version changed");
         }
-        recordEvent(id, entity.getStatus(), entity.getStatus(), "UPDATED", principal.realUserId(),
-                authz.displayRole(principal.effectiveRoles()).name(), null);
+        String role = authz.displayRole(principal.effectiveRoles()).name();
+        recordEvent(id, entity.getStatus(), entity.getStatus(), "UPDATED", principal.realUserId(), role, null);
         RequestEntity updated = requests.findById(id).orElseThrow();
-        emit(updated, "request.updated");
+        emit(updated, "request.updated", principal.realUserId(), role);
         return updated;
     }
 
@@ -214,7 +215,7 @@ public class RequestService {
     public void provisioningFailed(UUID id, String detail) {
         RequestEntity entity = load(id);
         recordEvent(id, entity.getStatus(), entity.getStatus(), "PROVISIONING_FAILED", SYSTEM, null, detail);
-        emit(entity, "request.provisioning_failed");
+        emit(entity, "request.provisioning_failed", SYSTEM, null);
     }
 
     // NOTE: get() and timeline() are unguarded engine primitives — they do NOT enforce read ABAC. The
@@ -260,7 +261,7 @@ public class RequestService {
         }
         recordEvent(entity.getId(), from, to, eventType, actor, effectiveRole, reason);
         RequestEntity updated = requests.findById(entity.getId()).orElseThrow();
-        emit(updated, outboxEvent);
+        emit(updated, outboxEvent, actor, effectiveRole);
         return updated;
     }
 
@@ -269,17 +270,25 @@ public class RequestService {
         events.save(new RequestEventEntity(requestId, from, to, eventType, actor, effectiveRole, reason, Instant.now()));
     }
 
-    private void emit(RequestEntity entity, String eventType) {
-        outbox.append(AGGREGATE, entity.getId().toString(), eventType, eventPayload(entity));
+    // The outbox payload carries the ACTOR (real principal) + effectiveRole so the Phase 6 relay — which
+    // runs in a background thread with no principal context — can attribute the audit row correctly. The
+    // actor is always in scope at the emit site (decide/submit/update → real principal; create → the
+    // requester; worker transitions → SYSTEM). effectiveRole may be null. Values are strings only: the
+    // audit hash chain canonicalizes this payload and a jsonb round-trip must be byte-stable.
+    private void emit(RequestEntity entity, String eventType, String actor, String effectiveRole) {
+        outbox.append(AGGREGATE, entity.getId().toString(), eventType, eventPayload(entity, actor, effectiveRole));
     }
 
-    private String eventPayload(RequestEntity entity) {
+    private String eventPayload(RequestEntity entity, String actor, String effectiveRole) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("id", entity.getId().toString());
+        payload.put("type", entity.getType().name());        // RequestType — distinguishes ONBOARDING vs ACCESS
+        payload.put("status", entity.getStatus().name());
+        payload.put("requester", entity.getRequester());
+        payload.put("actor", actor);
+        payload.put("effectiveRole", effectiveRole);
         try {
-            return json.writeValueAsString(Map.of(
-                    "id", entity.getId().toString(),
-                    "type", entity.getType().name(),
-                    "status", entity.getStatus().name(),
-                    "requester", entity.getRequester()));
+            return json.writeValueAsString(payload);
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("failed to serialize outbox payload", e);
         }
