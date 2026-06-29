@@ -1,0 +1,102 @@
+<div class="page">
+  <app-page-header
+    title="Audit log"
+    subtitle="Tamper-evident, hash-chained record of every action. Actor is always the real principal."
+  >
+    <button actions mat-stroked-button [disabled]="verifying()" (click)="runVerify()">
+      <mat-icon>verified_user</mat-icon> Re-verify chain
+    </button>
+  </app-page-header>
+
+  <!-- Chain integrity badge -->
+  @if (verifying()) {
+    <div class="verify checking">
+      <mat-spinner diameter="16" /> Checking chain integrity…
+    </div>
+  } @else if (verifyResult()) {
+    @if (verifyResult(); as v) {
+      @if (v.valid) {
+        <div class="verify ok">
+          <mat-icon>verified</mat-icon>
+          Chain intact — verified through seq {{ v.checkedThrough }}.
+        </div>
+      } @else {
+        <div class="verify broken">
+          <mat-icon>gpp_bad</mat-icon>
+          Chain broken at seq {{ v.brokenAt }} (verified through {{ v.checkedThrough }}).
+        </div>
+      }
+    }
+  }
+
+  <!-- Filters -->
+  <div class="filters">
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Actor</mat-label>
+      <input matInput [(ngModel)]="actor" (keyup.enter)="load()" />
+    </mat-form-field>
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Action</mat-label>
+      <input matInput [(ngModel)]="type" (keyup.enter)="load()" placeholder="e.g. app.approved" />
+    </mat-form-field>
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Resource</mat-label>
+      <input matInput [(ngModel)]="resource" (keyup.enter)="load()" />
+    </mat-form-field>
+    <button mat-flat-button color="primary" (click)="load()">Apply</button>
+  </div>
+
+  @if (loading()) {
+    <div class="state"><mat-spinner diameter="32" /></div>
+  } @else if (error()) {
+    <div class="card-surface state error">
+      <mat-icon>error_outline</mat-icon>
+      <span>{{ error() }}</span>
+      <button mat-button (click)="load()">Retry</button>
+    </div>
+  } @else if (events().length === 0) {
+    <div class="card-surface">
+      <app-empty-state icon="receipt_long" heading="No audit events" message="Nothing matches these filters yet." />
+    </div>
+  } @else {
+    <div class="card-surface list">
+      @for (e of events(); track e.id) {
+        <div class="event" [class.open]="isExpanded(e.id)">
+          <button class="event-head" (click)="toggle(e.id)" [attr.aria-expanded]="isExpanded(e.id)">
+            <mat-icon class="chev">{{ isExpanded(e.id) ? 'expand_more' : 'chevron_right' }}</mat-icon>
+            <span class="seq mono">#{{ e.seq }}</span>
+            <span class="action">{{ e.action }}</span>
+            <span class="resource text-muted">{{ e.resourceType }}<span class="rid">/{{ e.resourceId }}</span></span>
+            <span class="spacer"></span>
+            <span class="actor text-muted">{{ e.actor }}</span>
+            <span class="role">{{ roleText(e.effectiveRole) }}</span>
+            <time class="at text-subtle" [attr.datetime]="e.at">{{ e.at | date: 'medium' }}</time>
+          </button>
+
+          @if (isExpanded(e.id)) {
+            <div class="event-detail">
+              <dl class="kv">
+                @for (d of detailEntries(e); track d.key) {
+                  <dt>{{ d.key }}</dt>
+                  <dd>{{ d.value }}</dd>
+                }
+                <dt>hash</dt>
+                <dd class="mono">{{ short(e.hash) }}</dd>
+                <dt>prevHash</dt>
+                <dd class="mono">{{ short(e.prevHash) }}</dd>
+              </dl>
+            </div>
+          }
+        </div>
+      }
+    </div>
+
+    @if (nextCursor()) {
+      <div class="more">
+        <button mat-stroked-button [disabled]="loadingMore()" (click)="loadMore()">
+          {{ loadingMore() ? 'Loading…' : 'Load more' }}
+        </button>
+      </div>
+    }
+  }
+</div>
