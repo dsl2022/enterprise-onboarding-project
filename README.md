@@ -4,9 +4,13 @@ A cross-cloud **self-service portal for onboarding internal applications to SSO 
 access** — an **AWS-hosted** app that authenticates users against **Microsoft Entra ID** and provisions
 into **Microsoft Graph across clouds with zero stored credentials**.
 
-> **▶ Live demo:** https://d3919zy3gh57yu.cloudfront.net/app
-> Sign in with Microsoft using the demo account shared separately. *(Use the `/app` link directly — the
-> bare root is a legacy status page.)*
+> **▶ Live demo:** https://d3919zy3gh57yu.cloudfront.net/app — sign in with Microsoft. *(Use the `/app`
+> link directly — the bare root is a legacy status page.)* **Need an account?** Sign-in is real Entra SSO
+> with role-based access — **[contact the maintainer (@dsl2022)](docs/USER-GUIDE.md#getting-a-demo-account)
+> to be provisioned a demo (or Super Admin) account.**
+>
+> **📖 [Application User Guide](docs/USER-GUIDE.md)** — every feature explained + seven step-by-step
+> demo/testing scenarios.
 >
 > **Delivery board:** https://github.com/users/dsl2022/projects/9 · **Deep dives:**
 > [PROJECT_BRIEF_V0.md](PROJECT_BRIEF_V0.md) · [DECISIONS.md](DECISIONS.md) (ADRs) ·
@@ -108,14 +112,14 @@ Onboarding and access share **one request engine and state machine**; provisioni
 - ✅ Frozen API contract · ✅ Data layer (Postgres + Redis) · ✅ AuthZ engine (RBAC / ABAC / SoD / impersonation)
 - ✅ App onboarding **+ real Entra app-registration provisioning**
 - ✅ Access requests / My Access / removal **+ real Entra group-membership provisioning** · ✅ Teams
+- ✅ Unified review queue · ✅ **Tamper-evident audit** (hash-chained, single-writer, `/verify`) · ✅ In-app notifications
 
-**In progress / next:** tamper-evident audit (hash-chained, single-writer) + notifications · assistant
-stub · high-availability (≥2 tasks, pre-provisioned issuer key) · blue/green deploys · security hardening.
-All scoped on the [delivery board](https://github.com/users/dsl2022/projects/9); see also
-[docs/V1-PLAN.md](docs/V1-PLAN.md).
+The full UI is live to click today — see the **[Application User Guide](docs/USER-GUIDE.md)** for a
+feature-by-feature tour and demo walkthroughs.
 
-> The shell, SSO, role model, and impersonation are **live to click today**; feature screens are being
-> built out one at a time. This is a v1 in active development, shared early.
+**Next:** assistant wizard (currently a `501` stub) · high-availability (≥2 tasks, pre-provisioned issuer
+key) · blue/green deploys · security hardening. All scoped on the
+[delivery board](https://github.com/users/dsl2022/projects/9); see also [docs/V1-PLAN.md](docs/V1-PLAN.md).
 
 ## How it's built & governed
 
@@ -128,8 +132,8 @@ All scoped on the [delivery board](https://github.com/users/dsl2022/projects/9);
   - `frontend/` — Angular SPA + generated contract client
   - `deploy/terraform/` — root module + `envs/` + `modules/` (network, data, cache, edge, service, entra, webapp…)
   - `.github/workflows/` — `ci` · `infra` (plan/apply) · `app-deploy` · `frontend-deploy`
-  - `docs/` — frozen [OpenAPI](docs/api/openapi-v1.yaml), [RBAC matrix](docs/api/rbac-matrix.md),
-    [V1 plan](docs/V1-PLAN.md), change requests
+  - `docs/` — [Application User Guide](docs/USER-GUIDE.md), frozen [OpenAPI](docs/api/openapi-v1.yaml),
+    [RBAC matrix](docs/api/rbac-matrix.md), [V1 plan](docs/V1-PLAN.md), change requests
 
 ## Running it
 
