@@ -298,3 +298,123 @@ consultant + architect; must-fixes folded in.
 - Additive + one TF change (entra permission + service env toggle) + `V5` migration. 47 tests green (+7:
   GraphProvisioner find-hit/miss/429/403/duplicate against a mocked Graph; reaper recovery + backoff).
   Real end-to-end is the post-merge apply + GA consent + manual verify (like v0 Flow-2).
+
+## ADR-0017 — Phase 5a: access governance core (catalog, requests, my-access, removal) + simulated group provisioning
+**Context:** the second vertical over the 3b engine — self-service access governance. Reuses the engine
+(`RequestType.ACCESS` already auto-advances create → UNDER_REVIEW; `provisionedStatus=GRANTED`), the
+frozen RBAC matrix (all access permissions already in `RolePermissions`), and the 4b provisioner-port +
+reaper/backoff. Split (mirrors 4a/4b): **5a** = contract-complete, simulated provisioning, no consent;
+**5b** = real `GroupMember.ReadWrite.All` group writes (consent-gated); **5c** = teams (separate slice —
+direct CRUD, no engine). Reviewed by consultant + architect; must-dos folded in.
+**Decision:**
+- **`access` type-module over the engine** (mirrors `onboarding`): `AccessController` →
+  `/catalog*`, `/access-requests*`, `/my-access*`. Create validates the catalog resource, denormalizes
+  `resourceName`/`mappedGroup`/`risk` into the engine payload (`kind=grant`), and `engine.create(ACCESS)`
+  (auto-advances to UNDER_REVIEW — no separate submit). Decision routes to `engine.decide` (ACCESS_DECIDE
+  + **SoD on the real principal** + If-Match). **Read ABAC at the controller** (engine reads unguarded);
+  `access.read` `✔(own)` → owners see only their own. `Idempotency-Key` via `platform.IdempotencyService`.
+- **`access_grant` projection (`V6`) is the source of truth for "currently held"** (`removed_at IS NULL`),
+  **NOT** the request status — a removal request ends in `GRANTED`-meaning-"completed" (frozen enums have
+  no `REMOVED` state). `GET /my-access` reads it. A partial-unique index enforces at-most-one active grant
+  per (user, resource).
+- **Atomic completion** (architect must-fix): `AccessGrantService` (a SEPARATE bean so the `@Transactional`
+  proxy applies) wraps `engine.markProvisioned` (request schema) + the `access_grant` write (access schema)
+  in ONE transaction — no GRANTED-without-/my-access drift. The Graph/simulated call happens in the worker
+  BEFORE the tx.
+- **`expires_at` persisted (= `granted_at` + `duration`), NOT enforced** (architect must-do): duration is
+  **informational in v1**; persisting `expires_at` now makes the future expiry sweep a pure add (no
+  migration) — [[CR-20260628-2240]].
+- **Type-scoped worker/reaper** (architect must-fix): `findStaleProvisioning` (+ the APPROVED poll) now
+  take a `RequestType`, and `AccessProvisioningService` mirrors onboarding's worker but scoped to ACCESS —
+  so the onboarding worker never reaps an access row (it would try to register an app for it) and vice
+  versa. Same guarded claim + lease + exponential backoff.
+- **`directory.GroupMembershipProvisioner` port** + `SimulatedGroupProvisioner` (default-on → synthetic
+  grant ref, no Graph, no consent); the worker branches on `kind` (grant=addMember, removal=removeMember).
+  5b adds the real Graph impl, idempotent by **specific** error code (add→already-exists→ok,
+  remove→not-member→ok; bad-group-id 400 still surfaces).
+- **Catalog is read-only** (`V6` table + dev seed); management is a future admin CR (forced by the freeze —
+  only `GET /catalog*` exists). `mappedGroup`s are placeholders in 5a; 5b binds them to manually-created
+  Entra group object ids.
+**Consequences / scope limits / CR candidates:**
+- **Access `REQUEST_CHANGES` dead-ends** — no `/access-requests/{id}/submit` in the freeze; v1 = "open a new
+  request" ([[CR-20260628-2235]]).
+- `kind` filter on `GET /access-requests` is applied **in-memory** on the page (kind lives in the payload,
+  not a column) — minor pagination imprecision, acceptable at v1 dev scale.
+- **Duplicate-grant edge case (architect PR #98 review):** the active-grant unique index could trap a
+  double-approved request in PROVISIONING (unique violation → rollback → reaper loop). Closed at both ends:
+  `create()` rejects a grant for an already-held resource (**422**); `completeGrant` skips the insert when an
+  active grant already exists for (user, resource) — so a double-approval never trips the index and, in the
+  rare truly-concurrent case, self-heals on the next reaper pass instead of looping.
+- Known matrix gaps unchanged: no lean requester role; `ROLE`/`TEAM` catalog = governance groups not
+  portal-role elevation; approvers can't swap role/scope at decision (frozen `Decision` enum).
+- Additive: `V6` migration + new `access` module + the type-scope engine tweak; no TF/consent in 5a. 57
+  tests green (+10: access lifecycle/SoD/read-ABAC/removal/my-access/catalog + reaper + type-scoping).
+  Real group writes + consent are 5b.
+
+## ADR-0018 — per-vertical provisioning flags (fix the shared-`simulate`-flag deploy crash)
+**Context:** activating 4b (set `eop.provisioning.simulate=false`) crash-looped the task. That single flag
+gated **both** simulators — `SimulatedProvisioner` (onboarding) **and** `SimulatedGroupProvisioner`
+(access, shipped in 5a). Flipping it false turned on the onboarding real bean (`GraphProvisioner`, exists)
+but turned **off** the access simulator whose real counterpart (5b `GroupMembershipProvisioner`) doesn't
+exist yet → `AccessProvisioningService` had an unsatisfied dependency → context init failed. The OLD task
+(`simulate=true`) kept serving, so no outage, but real provisioning never activated. **CI was green because
+tests run with the `matchIfMissing=true` simulated defaults — `simulate=false` wiring is only exercised on
+a real deploy.** (Architect caught it on the live apply.)
+**Decision (forward-fix):**
+- **Split `simulate` per vertical:** `eop.provisioning.onboarding.simulate` and
+  `eop.provisioning.access.simulate`; each vertical's simulator/real-provisioner keys on its own flag. A
+  vertical whose real impl doesn't exist stays simulated (wired) regardless of the other. Same split for
+  the scheduler flag (`…onboarding.scheduler` / `…access.scheduler`) for symmetry.
+- **Schedulers run in the deployed task regardless** (set in the service env); the activation is *only* the
+  per-vertical `simulate` flip. So a still-simulated vertical keeps completing (no access-demo regression).
+- **TF:** `provisioning_real` → two independent vars `onboarding_provisioning_real` (true now, 4b) and
+  `access_provisioning_real` (false until 5b); each flips only its vertical's `EOP_PROVISIONING_*_SIMULATE`.
+- **Regression guard:** `ProvisioningWiringTest` boots the full context in the exact crashing combo
+  (onboarding `simulate=false`, access simulated; `WifAssertionService` mocked since `wif.enabled` is off in
+  tests) and asserts the right beans wire — so this class of flag-only deploy-wiring break is caught in CI,
+  not on a live apply.
+**Consequences:**
+- Forward-fix un-sticks the rollout: the new image (renamed flags) + per-vertical env → the next task boots
+  clean with onboarding real, access simulated. No rollback needed (old task kept serving meanwhile).
+- **Lesson:** a shared conditional flag across independently-activated verticals is a latent deploy trap
+  that unit/Testcontainers (simulated-default) tests can't see — boot-with-real-flag smoke tests are the
+  guard. Carry this pattern to any future vertical (audit/notify/teams).
+
+## ADR-0019 — Phase 5b: real Entra group-membership provisioning (Graph over WIF)
+**Context:** swap `SimulatedGroupProvisioner` for the real one so an approved access request adds the
+requester to the resource's Entra group (and a removal removes them), over the WIF token with
+`GroupMember.ReadWrite.All`. The consent-gated half of access; everything around it (worker, reaper,
+`access_grant` projection, atomic completion, per-vertical `access.simulate` flag, `access_provisioning_real`
+TF var) shipped in 5a + the flag-fix. Reviewed (Phase 5 + 5b note); architect must-dos folded in.
+**Decision:**
+- **oid was already canonical** — `PrincipalFactory` maps `realUserId` from the `oid` claim (object id),
+  not the app-pairwise `sub`. So SoD/ABAC/audit AND the new group-member id all key off `oid` (a real
+  directory object). No principal change needed — the load-bearing 5b risk was already handled in 3a.
+- **`directory.GraphGroupMembershipProvisioner`** (active `eop.provisioning.access.simulate=false`; needs
+  `wif.enabled=true`): `POST /groups/{id}/members/$ref` (body `@odata.id` → `directoryObjects/{oid}`) and
+  `DELETE …/members/{oid}/$ref`. Reuses the 4b 429/`Retry-After`/backoff idiom.
+- **Idempotent by specific Graph signal** (architect must-fix, NOT blanket 400/404): add→already-member is a
+  400 with message "…already exist" → success (tolerant, case-insensitive — Graph gives no distinct code);
+  remove→not-member is a 404 → success; a 404 on add (bad group/object) and any other 400 are rethrown
+  (surface). **403 is its own loud "missing GroupMember.ReadWrite.All consent" error**, never folded into
+  the 400 path. Composes with 5a's `completeGrant` (findByRequestId + findActive) → Graph-idempotent +
+  DB-idempotent = reaper/retry safe end-to-end.
+- **addMember returns a deterministic marker** (`{groupId}:{oid}`) since Graph add is 204 (no id) — this
+  arms the worker's DB-first `external_ref` skip so a re-provision doesn't re-call Graph (force the Graph
+  path in live idempotency tests by nulling `external_ref`).
+- **Symmetric wiring guard:** `ProvisioningWiringFullyRealTest` boots with BOTH `onboarding.simulate=false`
+  AND `access.simulate=false` and asserts both real provisioners wire — closes the symmetric form of the 4b
+  shared-flag crash (a future access flip can't silently break wiring).
+- **TF:** `modules/entra` declares `GroupMember.ReadWrite.All` (GUID `dbaae8cf-…`, **resolved live**);
+  activation is `access_provisioning_real=true` → `EOP_PROVISIONING_ACCESS_SIMULATE=false`. Consent granted
+  the same surgical `appRoleAssignment` way as OwnedBy; declare → consent → flip.
+**Consequences / scope limits:**
+- **Tenant-broad grant:** Graph has no per-group app-only scope for membership writes, so
+  `GroupMember.ReadWrite.All` lets the app touch ANY group. Acceptable for v1 dev; constrain/monitor for
+  prod ([[CR-20260629-0030]]).
+- **Dev test groups must be static (assigned) security groups** — not dynamic (manual add → 400) and not
+  role-assignable (membership writes need extra privilege → 403). Mapped-group object ids are injected at
+  test time (not committed) — catalog management is a future admin CR.
+- Real end-to-end is the post-merge apply + GA consent + seed-and-watch (grant → in group → /my-access;
+  removal → out of group → `removed_at`, request status GRANTED-means-completed), mirroring the 4b sign-off.
+- Additive: one new provisioner + TF permission + tests; the access machine is unchanged. Build green.

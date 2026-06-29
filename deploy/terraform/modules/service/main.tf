@@ -107,13 +107,22 @@ resource "aws_ecs_task_definition" "app" {
         { name = "DB_NAME", value = var.db_name },
         { name = "REDIS_HOST", value = var.redis_host },
         { name = "REDIS_PORT", value = tostring(var.redis_port) },
+        # Provisioning workers run in the deployed task (both schedulers on). `simulate` is PER VERTICAL and
+        # defaults true (simulated), so a vertical whose real provisioner doesn't exist yet stays wired —
+        # this is the fix for the shared-flag crash (4b's simulate=false used to also kill the access
+        # simulator, whose real impl is 5b, → context failed to start).
+        { name = "EOP_PROVISIONING_ONBOARDING_SCHEDULER", value = "true" },
+        { name = "EOP_PROVISIONING_ACCESS_SCHEDULER", value = "true" },
         ],
-        # Phase 4b: real Entra app-registration provisioning. Off by default (SimulatedProvisioner stays in
-        # charge → no Graph call) so this can be flipped ONLY AFTER a Global Admin grants admin consent for
-        # Application.ReadWrite.OwnedBy — a token minted before consent would 403 until its cache expires.
-        var.provisioning_real ? [
-          { name = "EOP_PROVISIONING_SIMULATE", value = "false" },
-          { name = "EOP_PROVISIONING_SCHEDULER", value = "true" },
+        # Onboarding real (4b): flip ONLY AFTER Application.ReadWrite.OwnedBy is admin-consented (a token
+        # minted before consent would 403 until its cache expires).
+        var.onboarding_provisioning_real ? [
+          { name = "EOP_PROVISIONING_ONBOARDING_SIMULATE", value = "false" },
+        ] : [],
+        # Access real (5b): flip ONLY AFTER GroupMember.ReadWrite.All is admin-consented AND the real group
+        # provisioner exists. Until then access stays simulated (the simulator reaches GRANTED with no Graph).
+        var.access_provisioning_real ? [
+          { name = "EOP_PROVISIONING_ACCESS_SIMULATE", value = "false" },
       ] : [])
       secrets = [
         { name = "ENTRA_CLIENT_SECRET", valueFrom = aws_secretsmanager_secret.flow1.arn },

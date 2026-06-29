@@ -13,7 +13,7 @@ import org.springframework.stereotype.Component;
  * over when {@code eop.provisioning.simulate=false}.
  */
 @Component
-@ConditionalOnProperty(name = "eop.provisioning.simulate", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(name = "eop.provisioning.onboarding.simulate", havingValue = "true", matchIfMissing = true)
 public class SimulatedProvisioner implements AppRegistrationProvisioner {
 
     private static final Logger log = LoggerFactory.getLogger(SimulatedProvisioner.class);

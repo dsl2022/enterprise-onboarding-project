@@ -126,7 +126,8 @@ module "service" {
   entra_client_secret = module.entra.client_secret_value
   create_flow1_secret = true
 
-  # Phase 4b: real Entra app-registration provisioning. Keep false for the FIRST apply (which only
-  # declares Application.ReadWrite.OwnedBy); flip true after a Global Admin grants admin consent.
-  provisioning_real = var.provisioning_real
+  # Per-vertical real-provisioning toggles (independent: 4b onboarding now, 5b access later). Flip a vertical
+  # true only after its Graph permission is admin-consented.
+  onboarding_provisioning_real = var.onboarding_provisioning_real
+  access_provisioning_real     = var.access_provisioning_real
 }

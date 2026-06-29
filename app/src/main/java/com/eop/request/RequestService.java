@@ -189,8 +189,8 @@ public class RequestService {
     }
 
     @Transactional(readOnly = true)
-    public Page<RequestEntity> findStaleProvisioning(Instant now, Pageable pageable) {
-        return requests.findStaleProvisioning(now, pageable);
+    public Page<RequestEntity> findStaleProvisioning(RequestType type, Instant now, Pageable pageable) {
+        return requests.findStaleProvisioning(type, now, pageable);
     }
 
     /** Complete provisioning: PROVISIONING → ACTIVE/GRANTED, persisting the external ref (e.g. client id). */

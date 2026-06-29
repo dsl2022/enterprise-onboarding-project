@@ -356,9 +356,16 @@ so the first apply only declares the permission.
    ```bash
    az ad sp show --id <entra_app_client_id> --query "appRoles" -o table   # or check oauth2PermissionGrants/appRoleAssignments
    ```
-3. **Flip on + roll.** Set `provisioning_real = true` in `dev.tfvars`, re-run `infra` + approve (this sets
-   `EOP_PROVISIONING_SIMULATE=false` + `EOP_PROVISIONING_SCHEDULER=true` on the task and rolls it). The
-   GraphProvisioner also requires `WIF_ENABLED=true` (already set) since it mints over the WIF token.
+3. **Flip on + roll.** Set `onboarding_provisioning_real = true` in `dev.tfvars`, re-run `infra` + approve
+   (this sets `EOP_PROVISIONING_ONBOARDING_SIMULATE=false` on the task and rolls it). The GraphProvisioner
+   also requires `WIF_ENABLED=true` (already set) since it mints over the WIF token.
+
+   > **Per-vertical flags (why):** `simulate` is split — `eop.provisioning.onboarding.simulate` and
+   > `eop.provisioning.access.simulate`. A single shared flag once crash-looped the task: flipping it to
+   > false for 4b also disabled the **access** simulator, whose real impl is 5b, leaving
+   > `AccessProvisioningService` with no `GroupMembershipProvisioner` → context init failed. So flip ONLY
+   > the vertical whose real provisioner exists AND whose Graph permission is consented. The schedulers run
+   > regardless (set in the service env), so a still-simulated vertical keeps completing.
 
 **Verify at the first real apply (the parts only provable live — log them, CR-1416-item-3 style):**
 - The `tags/any(t:t eq '…')` `$filter` on `/applications` is an **advanced query**: the provisioner sends
@@ -382,3 +389,45 @@ the worker's reaper re-claims and re-provisions it once the lease (`EOP_PROVISIO
 There is **no terminal `FAILED` state** yet (frozen enums) — a genuinely-stuck request retries forever at
 the cap and emits a `provisioning_failed` event each cycle; ops surfaces it via that event / the rising
 `provision_attempts`. A real "give up" terminal state is a future CR.
+
+## 10. Phase 5 — access governance + group-membership provisioning
+
+**5a (merged): no consent.** Catalog, access-requests, my-access, removal over the engine, simulated group
+provisioning to GRANTED. **5b (real group add/remove) — human GA consent required**, same load-bearing
+order as 4b: **declare → consent → flip**. Per-vertical flags mean this touches ONLY the access vertical;
+onboarding is unaffected.
+
+1. **Declare + apply (access still simulated).** TF `modules/entra` adds `GroupMember.ReadWrite.All` to
+   `eop-dev-app`; `access_provisioning_real=false` keeps `SimulatedGroupProvisioner` active. Merge the 5b PR
+   → run `infra` (env=dev, approve).
+2. **Create the dev test group(s)** — they MUST be **static (assigned) security groups**: not dynamic
+   (you can't manually add members → 400) and not role-assignable (membership writes need extra privilege →
+   403 even with consent). Grab the object id(s); the live test points a catalog row's `mapped_group` at a
+   real object id (injected at test time, not committed).
+   ```bash
+   az ad group create --display-name eop-dev-aws-prod --mail-nickname eop-dev-aws-prod \
+     --query id -o tsv   # static security group by default
+   ```
+3. **Grant admin consent (Global Admin)** for `GroupMember.ReadWrite.All` — resolve the GUID live, then the
+   same surgical app-role assignment as OwnedBy:
+   ```bash
+   az ad sp show --id 00000003-0000-0000-c000-000000000000 \
+     --query "appRoles[?value=='GroupMember.ReadWrite.All'].id" -o tsv   # → dbaae8cf-…
+   SP_ID=$(az ad sp list --display-name eop-dev-app --query "[0].id" -o tsv)
+   GRAPH_SP=$(az ad sp show --id 00000003-0000-0000-c000-000000000000 --query id -o tsv)
+   az rest --method POST --uri "https://graph.microsoft.com/v1.0/servicePrincipals/$SP_ID/appRoleAssignments" \
+     --headers "Content-Type=application/json" \
+     --body "{\"principalId\":\"$SP_ID\",\"resourceId\":\"$GRAPH_SP\",\"appRoleId\":\"dbaae8cf-10b5-4b86-a4a1-f871c94c6695\"}"
+   ```
+4. **Flip on + roll.** Set `access_provisioning_real = true` in `dev.tfvars`, re-run `infra` + approve
+   (sets `EOP_PROVISIONING_ACCESS_SIMULATE=false`, rolls the task). The member id is the requester's `oid`.
+
+**Verify live (mirror the 4b sign-off):** seed an APPROVED access request (requester = a real user `oid`,
+resource mapped to the real group) → row reaches GRANTED, the user appears in the group in Graph,
+`/my-access` shows it; then a removal → user removed from the group, `access_grant.removed_at` set while the
+removal **request** status reads `GRANTED` ("completed" — the projection, not the request status, is the
+source of truth); re-provision (null `external_ref` to force the Graph path) → idempotent, no error.
+
+> **Scope limit — tenant-broad grant.** `GroupMember.ReadWrite.All` lets the app modify ANY group's
+> membership (Graph has no per-group app-only scope). Fine for dev; constrain/monitor for prod
+> (CR-20260629-0030).

@@ -20,3 +20,12 @@ entra_app_role_assignments = [
 # at /api/v1/me (and Super Admin impersonation works), set this true in a follow-up apply to require an
 # app-role assignment for sign-in.
 # entra_require_app_role_assignment = true
+
+# ---- Phase 4b/5b: per-vertical real provisioning ----
+# Both verticals real: Application.ReadWrite.OwnedBy (4b) + GroupMember.ReadWrite.All (5b) are both
+# admin-consented on the eop-dev-app SP (2026-06-29), consent in place BEFORE the flip. access=true sets
+# EOP_PROVISIONING_ACCESS_SIMULATE=false → the real GraphGroupMembershipProvisioner; the post-flip task
+# roll mints a fresh token that carries GroupMember (access was simulated until now, so no cached pre-consent
+# token issue).
+onboarding_provisioning_real = true
+access_provisioning_real     = true

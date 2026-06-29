@@ -70,3 +70,12 @@ variable "app_readwrite_ownedby_role_id" {
   type        = string
   default     = "18a4783c-866b-4cc7-a460-3d5e5662c884"
 }
+
+# Phase 5b: access-grant group-membership provisioning. GUID resolved live against the Graph SP
+# (`az ad sp show --id 00000003-0000-0000-c000-000000000000 --query "appRoles[?value=='GroupMember.ReadWrite.All'].id"`
+# → dbaae8cf-…). Verify before apply — never trust the constant blindly.
+variable "group_member_readwrite_all_role_id" {
+  description = "Graph application app-role id for GroupMember.ReadWrite.All (verify against the live Graph SP)."
+  type        = string
+  default     = "dbaae8cf-10b5-4b86-a4a1-f871c94c6695"
+}
