@@ -6,6 +6,7 @@
  * Field-level traps to respect (from docs/integration/INTEGRATION-NOTES.md) are
  * called out inline.
  */
+import type { components } from './contract';
 
 // ---- Enums (string unions + value arrays for filters) ----------------------
 
@@ -171,9 +172,6 @@ export interface CatalogResource {
   description: string;
   /** Entra group an approval grants membership to. */
   mappedGroup: string;
-  /** Not in the contract schema, but harmless if the backend omits it. */
-  requiresApproval?: boolean;
-  owner?: string;
 }
 
 export interface AccessRequest {
@@ -311,3 +309,76 @@ export type CatalogPage = Page<CatalogResource>;
 export type AccessRequestPage = Page<AccessRequest>;
 export type ReviewQueuePage = Page<ReviewItem>;
 export type AuditPage = Page<AuditEvent>;
+
+// ===========================================================================
+// Contract conformance — compile-time drift guard.
+//
+// The hand-authored types above are the ergonomic surface; `contract.ts` is
+// generated from the frozen OpenAPI by `npm run gen:contract` (and CI fails on
+// any diff). These assertions bridge the two: if a hand type names a field the
+// contract no longer has, or types it incompatibly, or an enum value drifts,
+// the project STOPS COMPILING. So `models.ts` cannot silently diverge from the
+// contract even though it's hand-written. Type-only — zero runtime/bundle cost.
+//
+// Note: generated schema props are all optional (the contract marks few as
+// `required`), so the helpers compare via Partial<> to ignore the required-vs-
+// optional axis while still catching renamed/removed fields and type changes.
+// ===========================================================================
+
+type Schemas = components['schemas'];
+
+/** Fails (resolves to the offending keys) if M has a field absent from G. */
+type ExtraKeys<M, G> = Exclude<keyof M, keyof G>;
+/** True when every shared field of M is assignable to the contract's type. */
+type ValuesConform<M, G> = M extends Partial<{ [K in keyof M & keyof G]: G[K] }> ? true : false;
+/** M conforms to contract schema G: no extra keys AND compatible value types. */
+type Conforms<M, G> = [ExtraKeys<M, G>] extends [never] ? ValuesConform<M, G> : false;
+/** Bidirectional equality, for enums (catches added/removed enum values). */
+type Equal<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+/** Compiles only for `true`; anything else is a contract-drift error. */
+type Assert<T extends true> = T;
+
+/* eslint-disable @typescript-eslint/no-unused-vars */
+// Enums
+type _Role = Assert<Equal<Role, Schemas['Role']>>;
+type _OnboardingStatus = Assert<Equal<OnboardingStatus, Schemas['OnboardingStatus']>>;
+type _AccessStatus = Assert<Equal<AccessStatus, Schemas['AccessStatus']>>;
+type _Decision = Assert<Equal<Decision, Schemas['Decision']>>;
+type _ResourceType = Assert<Equal<ResourceType, Schemas['ResourceType']>>;
+type _Risk = Assert<Equal<Risk, Schemas['Risk']>>;
+type _AccessRequestKind = Assert<Equal<AccessRequestKind, Schemas['AccessRequestKind']>>;
+type _GrantType = Assert<Equal<GrantType, Schemas['GrantType']>>;
+
+// Objects
+type _Problem = Assert<Conforms<Problem, Schemas['Problem']>>;
+type _Me = Assert<Conforms<Me, Schemas['Me']>>;
+type _ImpersonationRequest = Assert<Conforms<ImpersonationRequest, Schemas['ImpersonationRequest']>>;
+type _Application = Assert<Conforms<Application, Schemas['Application']>>;
+type _ApplicationCreate = Assert<Conforms<ApplicationCreate, Schemas['ApplicationCreate']>>;
+type _ApplicationPatch = Assert<Conforms<ApplicationPatch, Schemas['ApplicationPatch']>>;
+type _DecisionBody = Assert<Conforms<DecisionBody, Schemas['DecisionBody']>>;
+type _TimelineEntry = Assert<Conforms<TimelineEntry, Schemas['TimelineEntry']>>;
+type _CatalogResource = Assert<Conforms<CatalogResource, Schemas['CatalogResource']>>;
+type _AccessRequest = Assert<Conforms<AccessRequest, Schemas['AccessRequest']>>;
+type _AccessRequestCreate = Assert<Conforms<AccessRequestCreate, Schemas['AccessRequestCreate']>>;
+type _MyAccessItem = Assert<Conforms<MyAccessItem, Schemas['MyAccessItem']>>;
+type _Team = Assert<Conforms<Team, Schemas['Team']>>;
+type _TeamCreate = Assert<Conforms<TeamCreate, Schemas['TeamCreate']>>;
+type _TeamMember = Assert<Conforms<TeamMember, Schemas['TeamMember']>>;
+type _TeamMemberAdd = Assert<Conforms<TeamMemberAdd, Schemas['TeamMemberAdd']>>;
+type _ReviewItem = Assert<Conforms<ReviewItem, Schemas['ReviewItem']>>;
+type _AuditEvent = Assert<Conforms<AuditEvent, Schemas['AuditEvent']>>;
+type _AuditVerifyResult = Assert<Conforms<AuditVerifyResult, Schemas['AuditVerifyResult']>>;
+type _Notification = Assert<Conforms<Notification, Schemas['Notification']>>;
+type _NotificationFeed = Assert<Conforms<NotificationFeed, Schemas['NotificationFeed']>>;
+type _AssistantChatRequest = Assert<Conforms<AssistantChatRequest, Schemas['AssistantChatRequest']>>;
+type _AssistantChatResponse = Assert<Conforms<AssistantChatResponse, Schemas['AssistantChatResponse']>>;
+type _ProposedAction = Assert<Conforms<ProposedAction, Schemas['ProposedAction']>>;
+
+// Page wrappers
+type _ApplicationPage = Assert<Conforms<ApplicationPage, Schemas['ApplicationPage']>>;
+type _CatalogPage = Assert<Conforms<CatalogPage, Schemas['CatalogPage']>>;
+type _AccessRequestPage = Assert<Conforms<AccessRequestPage, Schemas['AccessRequestPage']>>;
+type _ReviewQueuePage = Assert<Conforms<ReviewQueuePage, Schemas['ReviewQueuePage']>>;
+type _AuditPage = Assert<Conforms<AuditPage, Schemas['AuditPage']>>;
+/* eslint-enable @typescript-eslint/no-unused-vars */

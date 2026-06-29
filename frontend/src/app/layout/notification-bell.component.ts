@@ -45,7 +45,7 @@ import { NotificationsService } from '../core/services/notifications.service';
     </button>
 
     <mat-menu #menu="matMenu" class="bell-menu" xPosition="before">
-      <div class="bell-head" (click)="$event.stopPropagation()">
+      <div class="bell-head">
         <span class="title">Notifications</span>
         <button
           mat-button

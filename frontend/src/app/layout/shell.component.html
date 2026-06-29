@@ -68,7 +68,7 @@
       </button>
 
       <mat-menu #userMenu="matMenu" xPosition="before">
-        <div class="user-card" (click)="$event.stopPropagation()">
+        <div class="user-card">
           <div class="user-card-name">{{ auth.me()?.name }}</div>
           <div class="user-card-email text-muted">{{ auth.me()?.email }}</div>
         </div>

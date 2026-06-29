@@ -25,7 +25,7 @@ import { roleLabel } from '../shared/role-label';
     </button>
 
     <mat-menu #menu="matMenu" xPosition="before">
-      <div class="menu-caption" (click)="$event.stopPropagation()">View the portal as…</div>
+      <div class="menu-caption">View the portal as…</div>
       @for (role of impersonatableRoles; track role) {
         <button
           mat-menu-item
