@@ -458,3 +458,61 @@ request engine** (no approval/SoD/provisioning lifecycle).
 - `TeamMember.name` (display name) isn't resolved in v1 portal-local teams (no directory lookup) — returned
   null; the frontend resolves names separately.
 - Additive: `V7` + new `teams` module; no infra/consent. Contract untouched (Spectral green).
+
+## ADR-0021 — Phase 6a: hash-chained audit log + the single-leader outbox relay
+**Context:** the internal half of Phase 6 — `GET /audit` (filtered, cursor-paged) + `GET /audit/verify`,
+fed by draining `messaging.outbox` (accumulating `request.*`/`team.*` since Phase 3b). No external
+dependency, so it ships without a consent/verification gate (notify + SES are 6b). Architect review
+green-lit the design note with four decisions + a fifth (backlog) + three correctness must-addresses.
+**Decision (the four + backlog, as the architect ruled):**
+- **(1) Actor enrichment = enrich-at-emit.** The relay runs in a background thread with **no principal
+  context**, so it cannot attribute — the actor must travel in the event. `RequestService`/`TeamService`
+  emit now carry `actor` (real principal) + `effectiveRole` (nullable); worker transitions emit
+  `actor="system"`; the relay coalesces `actor → actorId → "system"` so legacy rows can't NPE. (Rejected:
+  a relay-side read-port — it would reach across modules and still lack a principal.)
+- **(2) DB immutability = trigger now (V8) + role REVOKE in Phase 10.** `audit.audit_events` has a
+  `BEFORE UPDATE OR DELETE` trigger that `RAISE`s — works regardless of connect role (belt-and-suspenders).
+  The real least-priv guarantee (app connects as a role with UPDATE/DELETE revoked) rides the Phase 10
+  DB-roles work; until then immutability is the trigger only (documented as partial).
+- **(3) Relay shape = single advisory-lock leader.** The audit chain is linear, so one writer is mandatory.
+  Elected by a Postgres **session-level** `pg_try_advisory_lock` held for the whole tick on a **dedicated
+  connection** (acquire→work→release-in-finally; connection close also releases → clean failover). A
+  non-leader tick is a no-op. `FOR UPDATE SKIP LOCKED` was rejected for audit (parallel claimers can't order
+  a chain) — it's reserved for 6b's order-independent notify fan-out. (Must-address **D**: connection
+  ownership is explicit; the lock never rides a pooled connection that could be handed back mid-tick.)
+- **(4) `at` = event `occurred_at`** (when it happened), not relay processing time. Added a separate
+  `audited_at DEFAULT now()` (relay wall-clock) purely for lag monitoring — cleanly separates the two.
+- **(5) Pre-6a backlog = fast-forward, don't backfill.** The outbox rows from 4b/5b/5c live runs predate
+  enrichment (degraded attribution) and are throwaway test data, so `V8` sets `published_at = now()` on all
+  then-unpublished rows: the chain starts **clean** at first 6a deploy rather than polluted. The relay still
+  carries the missing-actor fallback for any row an old task emits mid-deploy. (`published_at` is consumed
+  only by the relay; provisioning reads request status, so the fast-forward can't affect in-flight work.)
+**Correctness must-addresses (folded into the build):**
+- **(A) jsonb canonicalization round-trip.** The hash pre-image is canonicalized by one shared `AuditHasher`
+  used at BOTH insert and verify (sorted keys, recursive), so verify re-hashes a faithful row identically.
+  `detail` is stored as `jsonb` but its values are **strings only** so a store→read→re-canonicalize is
+  byte-stable (jsonb normalizes numbers / drops dup keys). Originally an emit-site convention; on architect
+  hardening note #1 the **projector now coerces every detail value to its string form** before
+  hashing/storing, so verifiability is independent of emit discipline (a future numeric field can't silently
+  break verify). Guarded by a golden-vector unit test (pinned canonical string), a Postgres round-trip
+  integration test, **and** a numeric-detail-coercion test.
+- **(B) `seq` is not gap-free.** `GENERATED ALWAYS AS IDENTITY` consumes values on rollback (the 23505
+  idempotency path, any transient failure), so seq has gaps. Harmless: integrity is `prev_hash` linkage, not
+  contiguity. `seq` is deliberately **excluded from the hash pre-image** (DB-generated, unknowable
+  pre-insert, and can't be patched post-insert because the row is immutable). `/audit/verify` walks
+  `ORDER BY seq` tolerating gaps. No client may assume contiguity (documented in STATUS + INTEGRATION-NOTES).
+- **(C) 23505 needs no shared transaction.** Each handler (`AuditProjector.handle`) is its **own**
+  `@Transactional`; the relay bean is **not** transactional and `markPublished`/`backoff` are autonomous. So
+  a duplicate-`source_event_id` insert aborts only its own tx and surfaces as `DuplicateKeyException`, which
+  the relay swallows **per-handler** — no aborted transaction is ever reused (the savepoint requirement is
+  met structurally, and per-handler catch keeps 6b's notify handler independently idempotent).
+- **(E) Poison visibility.** A transient handler failure defers the row (exponential backoff, reusing the
+  reaper's cap) and **stops the tick** (audit must not skip) — so a stuck row halts the whole chain, which
+  for audit is correct but a compliance hazard, so it is logged loudly past `POISON_ATTEMPTS` (full
+  dead-lettering deferred to 6b).
+**Module/contract:** new `audit` module (ArchUnit `audit_module_boundary` → `authz`+`platform` only); the
+relay + `OutboxEventHandler` SPI + `OutboxRecord` are platform-owned (dependency inversion — platform never
+depends on audit). `EOP_RELAY_SCHEDULER=true` always-on in deploy (no gate). Contract untouched (the
+`/audit*` shapes were frozen in v1). Minor/deferred: `resource_type` alone can't tell onboarding from access
+(both are the `request` aggregate) — `detail.type` (RequestType) distinguishes them; `/audit/verify` is O(n)
+from genesis (fine for v1/dev; checkpointing deferred to prod scale).

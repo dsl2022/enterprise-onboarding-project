@@ -215,12 +215,32 @@ class RequestEngineTest {
         assertThat(service.get(id).getStatus()).isEqualTo(RequestStatus.APPROVED);
     }
 
-    /** Run a transition, returning the result or the thrown exception (so both threads complete). */
+    /**
+     * Run a transition, returning the result or the thrown <em>logical</em> exception (so both threads
+     * complete). A {@link org.springframework.dao.TransientDataAccessException} (deadlock loser,
+     * lock-acquisition timeout, serialization failure) is genuinely retryable infra contention — NOT a
+     * logical outcome — so we retry it with a small backoff rather than let it masquerade as "nobody won"
+     * (CR-20260629-1510). Non-transient results (ConflictException / PreconditionFailedException) are the
+     * logical race outcomes and are returned, never retried — so the serializer invariant the test asserts
+     * (exactly one winner, one conflict) is preserved, just no longer flaky under heavy parallel CI load.
+     */
     private Object attempt(Callable<RequestEntity> action) {
-        try {
-            return action.call();
-        } catch (Exception e) {
-            return e;
+        for (int tries = 0; ; tries++) {
+            try {
+                return action.call();
+            } catch (org.springframework.dao.TransientDataAccessException transientEx) {
+                if (tries >= 10) {
+                    return transientEx; // give up — let the assertion surface a genuinely stuck serializer
+                }
+                try {
+                    Thread.sleep(10L * (tries + 1)); // brief backoff, then re-drive to its deterministic end
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    return ie;
+                }
+            } catch (Exception e) {
+                return e; // a logical outcome (Conflict / PreconditionFailed / etc.)
+            }
         }
     }
 

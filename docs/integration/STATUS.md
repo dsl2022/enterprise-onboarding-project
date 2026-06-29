@@ -10,7 +10,7 @@ Legend:
 - ⚪ **MOCK** — contract-stable but backend not built yet; mock from the OpenAPI.
 - 🛑 **501** — endpoint will exist but returns Not Implemented in v1.
 
-_Last updated: 2026-06-29 (Phases 4b + 5a/5b live & verified; teams 5c in PR #123)._
+_Last updated: 2026-06-29 (Phase 6a audit + outbox relay built, CI-green, PR pending; teams 5c merged)._
 
 ## Identity / session (Phase 3a) — 🟢 LIVE
 | Endpoint | Status | Notes |
@@ -54,11 +54,23 @@ _Last updated: 2026-06-29 (Phases 4b + 5a/5b live & verified; teams 5c in PR #12
 
 Portal-local in v1 (no Entra group backing); no `DELETE /teams/{id}` exists.
 
+## Audit (Phase 6a) — `/audit*` — 🟡 LIVE (PR pending, merges live)
+| Endpoint | Status | Notes |
+|---|---|---|
+| `GET /audit` | 🟡 | `audit.read` (SSO_OPS/ADMIN/AUDITOR/SUPER_ADMIN). Filters `actor`/`type`(=resourceType)/`resource`(=resourceId)/`from`/`to`; cursor-paged, newest first. |
+| `GET /audit/verify` | 🟡 | Recomputes the hash chain → `{valid, checkedThrough, brokenAt}`. `audit.read`. |
+
+Audit is **derived**, not written by the API: a single leader-elected relay projects every domain event
+(`request.*`, `team.*`) from the outbox into a hash-chained, append-only log (actor = the **real** principal,
+even while impersonating). `actor`/`seq`/`prevHash`/`hash` are exposed so a client can re-verify. **`seq` is
+monotonic but may have gaps** (don't assume contiguity); integrity is the `prevHash` linkage. Rows are
+DB-immutable (UPDATE/DELETE denied). Events from before 6a (the 4b/5b/5c test runs) are **not** backfilled —
+the chain starts clean at first 6a deploy.
+
 ## Not built yet — mock from the contract
 | Area | Endpoint(s) | Status | Phase |
 |---|---|---|---|
-| Audit (6) | `GET /audit` | ⚪ MOCK | 6 |
-| Notifications (6) | `GET /notifications`, `POST /notifications/{id}/read`, `POST /notifications/read-all` | ⚪ MOCK | 6 |
+| Notifications (6b) | `GET /notifications`, `POST /notifications/{id}/read`, `POST /notifications/read-all` | ⚪ MOCK | 6b |
 | Assistant (7) | `POST /assistant/chat` | 🛑 501 | 7 (stub only in v1) |
 
 ## Suggested frontend build order

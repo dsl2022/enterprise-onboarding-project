@@ -59,7 +59,7 @@ public class TeamService {
         }
         TeamEntity t = new TeamEntity(UUID.randomUUID(), body.name(), body.description(), principal.realUserId());
         teams.save(t);
-        emit("team.created", t.getId(), null, principal.realUserId());
+        emit("team.created", t.getId(), null, principal.realUserId(), roleOf(principal));
         return new Team(t.getId().toString(), t.getName(), t.getDescription(), 0);
     }
 
@@ -100,11 +100,11 @@ public class TeamService {
         if (m == null) {
             m = new TeamMemberEntity(UUID.randomUUID(), teamId, body.userId());
             members.save(m);
-            emit("team.member.added", teamId, body.userId(), principal.realUserId());
+            emit("team.member.added", teamId, body.userId(), principal.realUserId(), roleOf(principal));
         } else if (m.getRemovedAt() != null) {
             m.reactivate();                                       // re-add reactivates the soft-deleted row
             members.save(m);
-            emit("team.member.added", teamId, body.userId(), principal.realUserId());
+            emit("team.member.added", teamId, body.userId(), principal.realUserId(), roleOf(principal));
         } // else already an active member → idempotent (no row change, no event)
         return new TeamMember(m.getUserId(), null, m.getAddedAt());
     }
@@ -118,7 +118,7 @@ public class TeamService {
                 .orElseThrow(() -> new NotFoundException("user " + userId + " is not an active member"));
         m.softDelete();
         members.save(m);
-        emit("team.member.removed", teamId, userId, principal.realUserId());
+        emit("team.member.removed", teamId, userId, principal.realUserId(), roleOf(principal));
     }
 
     // ---- internals ----
@@ -151,12 +151,22 @@ public class TeamService {
         return counts;
     }
 
-    /** Audit event to the shared outbox (Pin C envelope: teamId/userId/actorId/occurredAt). Phase 6 relays. */
-    private void emit(String eventType, UUID teamId, String userId, String actorId) {
+    /**
+     * Audit event to the shared outbox (Pin C envelope: teamId/userId/actorId/occurredAt). The Phase 6
+     * relay attributes the audit row from {@code actor} (the real principal, same as actorId) +
+     * {@code effectiveRole}; it runs without principal context so the actor must travel in the payload.
+     */
+    private String roleOf(CurrentPrincipal principal) {
+        return authz.displayRole(principal.effectiveRoles()).name();
+    }
+
+    private void emit(String eventType, UUID teamId, String userId, String actorId, String effectiveRole) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("teamId", teamId.toString());
         payload.put("userId", userId);
         payload.put("actorId", actorId);
+        payload.put("actor", actorId);            // alias the relay reads uniformly across aggregates
+        payload.put("effectiveRole", effectiveRole);
         payload.put("occurredAt", Instant.now().toString());
         outbox.append(AGG, teamId.toString(), eventType, write(payload));
     }
