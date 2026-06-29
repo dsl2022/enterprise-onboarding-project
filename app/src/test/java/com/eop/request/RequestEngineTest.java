@@ -200,9 +200,15 @@ class RequestEngineTest {
             Object rb = fb.get();
 
             long successes = List.of(ra, rb).stream().filter(r -> r instanceof RequestEntity).count();
-            long conflicts = List.of(ra, rb).stream().filter(r -> r instanceof ConflictException).count();
+            // The loser's exact failure depends on timing: ConflictException (409) once the winner's
+            // status change is visible, or PreconditionFailedException (412) when only the version has
+            // bumped yet. Both are valid "lost the optimistic-concurrency race" outcomes — accept either
+            // (asserting only ConflictException is what made this test flaky).
+            long lostRace = List.of(ra, rb).stream()
+                    .filter(r -> r instanceof ConflictException || r instanceof PreconditionFailedException)
+                    .count();
             assertThat(successes).isEqualTo(1);
-            assertThat(conflicts).isEqualTo(1);
+            assertThat(lostRace).isEqualTo(1);
         } finally {
             pool.shutdownNow();
         }
