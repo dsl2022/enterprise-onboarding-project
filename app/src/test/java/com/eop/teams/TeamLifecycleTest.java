@@ -94,6 +94,21 @@ class TeamLifecycleTest {
     }
 
     @Test
+    void member_can_read_but_not_manage_manage_is_owner_only() {
+        var owner = principal("owner-t6", PortalRole.APPLICATION_OWNER);
+        var member = principal("member-t6", PortalRole.APPLICATION_OWNER);
+        UUID id = UUID.fromString(teams.create(owner, new TeamCreate("OwnerOnly " + UUID.randomUUID(), null)).id());
+        teams.addMember(owner, id, new TeamMemberAdd("member-t6"));
+
+        assertThat(teams.members(member, id)).isNotEmpty();               // member READS (team.read OWN = member)
+        // ...but a member cannot MANAGE — team.manage(own) is creator-only (no viral delegation).
+        assertThatThrownBy(() -> teams.addMember(member, id, new TeamMemberAdd("intruder")))
+                .isInstanceOf(ForbiddenException.class);
+        assertThatThrownBy(() -> teams.removeMember(member, id, "member-t6"))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
     void manage_admin_sees_all_owner_scoped_stranger_denied() {
         var owner = principal("owner-t5", PortalRole.APPLICATION_OWNER);
         var admin = principal("admin-t5", PortalRole.ADMIN);

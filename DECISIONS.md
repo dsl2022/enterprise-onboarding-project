@@ -432,11 +432,13 @@ request engine** (no approval/SoD/provisioning lifecycle).
   `GroupMembershipProvisioner` (reusing 5b's grant), not a synchronous Graph call in `TeamService`.
 - **`teams` module depends only on `authz` + `platform`** — never `request` (ArchUnit `teams_module_boundary`,
   Pin D). No engine.
-- **ABAC: `TeamEntity implements Ownable`** — `ownerId()`=creator oid, `teamMemberIds()`=active member oids
-  (loaded by the service). So `team.read`/`team.manage(own)` = **creator OR active member** (closes the
-  "member can't see their own team" gap). Consequence: an active member who independently holds
-  `team.manage` (APPLICATION_OWNER) co-manages the team — a deliberate ownership-delegation surface
-  (documented in `rbac-matrix.md`).
+- **ABAC: `TeamEntity implements Ownable`** — `ownerId()`=creator oid, `teamMemberIds()`=active member oids.
+  **`team.read(own)` = creator OR active member** (closes the "member can't see their own team" gap), but
+  **`team.manage(own)` = creator-only** (members read-only — non-viral delegation, forward-safe for when app
+  co-ownership lands). The shared `Ownable.owns()` (ownerId OR teamMemberIds) can't express manage≠read in
+  one method, so the distinction is the load: read ops load the team WITH active members (creator-or-member);
+  manage ops load it WITHOUT (empty `teamMemberIds()` → `owns()` = creator-only). ADMIN/SUPER unaffected (ALL
+  scope). (Architect PR #123 sign-off.)
 - **Pin A — co-ownership is `TeamEntity`-only in v1.** `Application.team[]` lives in the request payload,
   and `RequestEntity` deliberately keeps the empty `teamMemberIds()` default (the engine never parses
   payload for ABAC). So onboarding apps get **no** team co-ownership yet (regression-guarded). Wiring it is

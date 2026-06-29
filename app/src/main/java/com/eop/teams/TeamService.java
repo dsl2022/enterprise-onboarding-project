@@ -94,8 +94,8 @@ public class TeamService {
         if (!StringUtils.hasText(body.userId())) {
             throw new UnprocessableException("userId is required");
         }
-        TeamEntity team = loadWithMembers(teamId);                // 404
-        authz.require(principal, Permission.TEAM_MANAGE, team);   // 403
+        TeamEntity team = load(teamId);                           // 404 — NO members loaded
+        authz.require(principal, Permission.TEAM_MANAGE, team);   // 403 — OWN = creator only (manage ≠ read)
         TeamMemberEntity m = members.findByTeamIdAndUserId(teamId, body.userId()).orElse(null);
         if (m == null) {
             m = new TeamMemberEntity(UUID.randomUUID(), teamId, body.userId());
@@ -111,8 +111,8 @@ public class TeamService {
 
     @Transactional
     public void removeMember(CurrentPrincipal principal, UUID teamId, String userId) {
-        TeamEntity team = loadWithMembers(teamId);                // 404
-        authz.require(principal, Permission.TEAM_MANAGE, team);   // 403
+        TeamEntity team = load(teamId);                           // 404 — NO members loaded
+        authz.require(principal, Permission.TEAM_MANAGE, team);   // 403 — OWN = creator only (manage ≠ read)
         TeamMemberEntity m = members.findByTeamIdAndUserId(teamId, userId)
                 .filter(x -> x.getRemovedAt() == null)
                 .orElseThrow(() -> new NotFoundException("user " + userId + " is not an active member"));
@@ -123,13 +123,23 @@ public class TeamService {
 
     // ---- internals ----
 
-    private TeamEntity loadWithMembers(UUID teamId) {
-        TeamEntity team = teams.findById(teamId)
+    /**
+     * Load WITHOUT members → {@code teamMemberIds()} is empty, so {@code owns()} reduces to creator-only.
+     * Used for {@code team.manage} (add/remove) so management is owner-only (members are read-only); the
+     * shared {@code Ownable.owns()} (ownerId OR teamMemberIds) can't express manage≠read in one method, so
+     * the distinction is which load the caller uses. ADMIN/SUPER are unaffected (ALL scope, no ABAC check).
+     */
+    private TeamEntity load(UUID teamId) {
+        return teams.findById(teamId)
                 .orElseThrow(() -> new NotFoundException("team " + teamId + " not found"));
+    }
+
+    private TeamEntity loadWithMembers(UUID teamId) {
+        TeamEntity team = load(teamId);
         Set<String> active = members.findActiveByTeamId(teamId).stream()
                 .map(TeamMemberEntity::getUserId)
                 .collect(Collectors.toSet());
-        team.withActiveMembers(active);
+        team.withActiveMembers(active); // populated → team.read OWN = creator OR member
         return team;
     }
 
