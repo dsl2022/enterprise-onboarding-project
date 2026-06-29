@@ -3,6 +3,11 @@ output "app_url" {
   value       = "https://${aws_cloudfront_distribution.app.domain_name}"
 }
 
+output "distribution_id" {
+  description = "App CloudFront distribution id (frontend-deploy invalidates /app/* on it)."
+  value       = aws_cloudfront_distribution.app.id
+}
+
 output "target_group_arn" {
   value = aws_lb_target_group.app.arn
 }

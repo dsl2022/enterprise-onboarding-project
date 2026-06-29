@@ -99,6 +99,14 @@ resource "aws_cloudfront_distribution" "app" {
     }
   }
 
+  # SPA origin: the Angular build in S3, read only via OAC (module.webapp).
+  origin {
+    domain_name              = var.spa_bucket_regional_domain_name
+    origin_id                = "webapp-s3"
+    origin_access_control_id = var.spa_oac_id
+  }
+
+  # DEFAULT: legacy HTML + the BFF (/, /api/v1, /auth/*). Untouched by the SPA add.
   default_cache_behavior {
     target_origin_id         = "app-alb"
     viewer_protocol_policy   = "redirect-to-https"
@@ -106,6 +114,38 @@ resource "aws_cloudfront_distribution" "app" {
     cached_methods           = ["GET", "HEAD"]
     cache_policy_id          = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" # Managed-CachingDisabled
     origin_request_policy_id = "216adef6-5c7f-47e4-b989-5492eafa07d3" # Managed-AllViewer (forwards headers/cookies/qs)
+  }
+
+  # /app and /app/* -> the Angular SPA in S3. CachingOptimized is safe because the
+  # build emits content-hashed asset names; the SPA-router function maps deep
+  # links to /app/index.html. The frontend-deploy workflow invalidates /app/* on
+  # each release so index.html updates immediately.
+  ordered_cache_behavior {
+    path_pattern           = "/app"
+    target_origin_id       = "webapp-s3"
+    viewer_protocol_policy = "redirect-to-https"
+    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
+    cached_methods         = ["GET", "HEAD"]
+    compress               = true
+    cache_policy_id        = "658327ea-f89d-4fab-a63d-7e88639e58f6" # Managed-CachingOptimized
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = var.spa_function_arn
+    }
+  }
+
+  ordered_cache_behavior {
+    path_pattern           = "/app/*"
+    target_origin_id       = "webapp-s3"
+    viewer_protocol_policy = "redirect-to-https"
+    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
+    cached_methods         = ["GET", "HEAD"]
+    compress               = true
+    cache_policy_id        = "658327ea-f89d-4fab-a63d-7e88639e58f6" # Managed-CachingOptimized
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = var.spa_function_arn
+    }
   }
 
   restrictions {
@@ -117,4 +157,30 @@ resource "aws_cloudfront_distribution" "app" {
   viewer_certificate {
     cloudfront_default_certificate = true
   }
+}
+
+# Bucket policy: only THIS distribution may read the SPA bucket (OAC, by SourceArn).
+# Lives here because it needs the distribution ARN (defined above) and the bucket
+# (passed in from module.webapp) — keeping it here avoids a module dependency cycle.
+data "aws_iam_policy_document" "spa_bucket" {
+  statement {
+    sid       = "AllowCloudFrontOAC"
+    effect    = "Allow"
+    actions   = ["s3:GetObject"]
+    resources = ["${var.spa_bucket_arn}/*"]
+    principals {
+      type        = "Service"
+      identifiers = ["cloudfront.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "AWS:SourceArn"
+      values   = [aws_cloudfront_distribution.app.arn]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "spa" {
+  bucket = var.spa_bucket_id
+  policy = data.aws_iam_policy_document.spa_bucket.json
 }

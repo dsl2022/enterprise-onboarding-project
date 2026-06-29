@@ -1,0 +1,79 @@
+name: frontend-deploy
+
+# Build the Angular client and publish it to the SPA S3 bucket served at /app
+# (same CloudFront distribution as the BFF — same-origin, cookie just works).
+# It does NOT run Terraform: the `infra` workflow creates the bucket + /app
+# behavior and records the targets to SSM; this job reads them and syncs content.
+#
+# Sequencing for the first go-live:
+#   1) merge the infra PR, run `infra` (env=dev) + approve  -> bucket + /app exist
+#   2) merge the frontend  -> this workflow syncs the build  -> /app is live
+on:
+  push:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend-deploy.yml"
+  workflow_dispatch:
+    inputs:
+      env:
+        description: Environment
+        type: choice
+        options: [dev]
+        default: dev
+
+permissions:
+  contents: read
+  id-token: write # OIDC -> AWS (no stored credentials)
+
+env:
+  AWS_REGION: us-east-1
+  ENV: ${{ github.event.inputs.env || 'dev' }}
+
+jobs:
+  build-sync:
+    runs-on: ubuntu-latest
+    # Assumes the DEPLOY role (sub=...:ref:refs/heads/main), same as app-deploy.
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20" # Angular 18; matches .nvmrc + the ci frontend job
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install (clean, lockfile-pinned)
+        run: npm ci
+      - name: Build (production, served under /app)
+        run: npm run build -- --base-href=/app/
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Resolve targets from SSM (written by Terraform)
+        id: targets
+        run: |
+          BUCKET=$(aws ssm get-parameter --name "/eop/${ENV}/webapp_bucket" --query Parameter.Value --output text)
+          DIST=$(aws ssm get-parameter --name "/eop/${ENV}/app_distribution_id" --query Parameter.Value --output text)
+          echo "bucket=$BUCKET" >> "$GITHUB_OUTPUT"
+          echo "dist=$DIST" >> "$GITHUB_OUTPUT"
+
+      - name: Sync build to S3 (under the app/ prefix)
+        run: |
+          # Hashed assets: cache forever. index.html: never cache (points at hashed assets).
+          aws s3 sync dist/frontend/browser "s3://${{ steps.targets.outputs.bucket }}/app" \
+            --delete \
+            --cache-control "public,max-age=31536000,immutable" \
+            --exclude "index.html"
+          aws s3 cp dist/frontend/browser/index.html "s3://${{ steps.targets.outputs.bucket }}/app/index.html" \
+            --cache-control "no-cache"
+
+      - name: Invalidate /app on CloudFront
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ steps.targets.outputs.dist }}" \
+            --paths "/app/*" "/app"
