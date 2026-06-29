@@ -30,3 +30,4 @@ gates, where "why did we change this field?" must be answerable months later.
 | [CR-20260628-2116](CR-20260628-2116-v1-contract-idempotency-422.md) | 2026-06-28 21:16 EDT | PR #80 | add 422 to idempotent POSTs (contract 1.0.1) | Applied (1dcbcbf) |
 | [CR-20260628-2235](CR-20260628-2235-v1-contract-access-resubmit.md) | 2026-06-28 22:35 EDT | Phase 5 note | add `/access-requests/{id}/submit` (access resubmit) | Open (candidate) |
 | [CR-20260628-2240](CR-20260628-2240-v1-access-duration-expiry-sweep.md) | 2026-06-28 22:40 EDT | Phase 5 note | time-bound access expiry de-provision sweep | Open (candidate) |
+| [CR-20260629-0030](CR-20260629-0030-v1-groupmember-grant-scope-prod.md) | 2026-06-29 00:30 EDT | Phase 5b note | constrain/monitor tenant-broad GroupMember.ReadWrite.All (prod) | Open (candidate) |

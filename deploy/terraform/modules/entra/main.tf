@@ -36,6 +36,13 @@ resource "azuread_application" "app" {
       id   = var.app_readwrite_ownedby_role_id # Application.ReadWrite.OwnedBy
       type = "Role"                            # application permission
     }
+    # Phase 5b: add/remove access-grant group members. NOTE: Graph has no per-group app-only scope for
+    # membership writes — this grant is tenant-broad (any group). Acceptable for dev; constrain/monitor for
+    # prod (tracked CR). See ADR-0019.
+    resource_access {
+      id   = var.group_member_readwrite_all_role_id # GroupMember.ReadWrite.All
+      type = "Role"                                 # application permission
+    }
   }
 
   dynamic "app_role" {
