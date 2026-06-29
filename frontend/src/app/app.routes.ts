@@ -87,5 +87,12 @@ export const routes: Routes = [
     loadComponent: () => import('./features/audit/audit.component').then((m) => m.AuditComponent),
   },
 
+  {
+    path: 'assistant',
+    canActivate: [authGuard, permissionGuard('assistant.use')],
+    loadComponent: () =>
+      import('./features/assistant/assistant.component').then((m) => m.AssistantComponent),
+  },
+
   { path: '**', redirectTo: 'dashboard' },
 ];

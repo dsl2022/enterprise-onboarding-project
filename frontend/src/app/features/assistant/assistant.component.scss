@@ -1,0 +1,144 @@
+.preview-tag {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--status-info-fg);
+  background: var(--status-info-bg);
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  white-space: nowrap;
+}
+
+.notice {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--status-warning-bg, var(--surface-sunken));
+  color: var(--status-warning-fg, var(--text));
+  margin-bottom: var(--space-4);
+}
+.notice mat-icon {
+  flex: 0 0 auto;
+}
+.notice-body p {
+  margin: var(--space-1) 0 0;
+  font-size: 13px;
+}
+.notice code {
+  font-size: 12px;
+}
+
+.thread {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-height: 200px;
+  padding: var(--space-2) 0 var(--space-4);
+}
+
+.msg {
+  display: flex;
+  gap: var(--space-3);
+  max-width: 760px;
+}
+.msg.user {
+  flex-direction: row-reverse;
+  align-self: flex-end;
+}
+.msg .avatar {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  font-size: 22px;
+  color: var(--text-subtle);
+  margin-top: 2px;
+}
+.msg.user .avatar {
+  color: var(--primary);
+}
+
+.bubble {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--surface-sunken);
+}
+.msg.user .bubble {
+  background: var(--primary-container, var(--status-info-bg));
+}
+.msg.system .bubble {
+  background: var(--status-warning-bg, var(--surface-sunken));
+  color: var(--status-warning-fg, var(--text-muted));
+  font-size: 13px;
+}
+.bubble .text {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.45;
+}
+.bubble.typing {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-muted);
+}
+
+.proposed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+.proposed-label {
+  font-size: 12px;
+  width: 100%;
+}
+.action-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 2px 10px 2px 6px;
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.action-chip mat-icon {
+  font-size: 15px;
+  width: 15px;
+  height: 15px;
+  color: var(--primary);
+}
+
+.suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.composer {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+.composer .grow {
+  flex: 1 1 auto;
+}
+.composer button {
+  margin-top: 4px;
+}
+
+.hint {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-3) 0 0;
+  font-size: 12px;
+}
+.hint mat-icon {
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+}

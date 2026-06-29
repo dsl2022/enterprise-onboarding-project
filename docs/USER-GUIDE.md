@@ -155,6 +155,17 @@ A tamper-evident record of every action. Under **Audit** (SSO_OPS / ADMIN / AUDI
   separately. `seq` is an ordering key (may have gaps), never a count. The log is
   eventually-consistent — a just-taken action appears within a moment.
 
+### Assistant (preview)
+An **advisory** onboarding helper under **Assistant** (visible to roles with `assistant.use`). It's a
+chat surface meant to help you draft the wizard forms — descriptions, redirect-URI checks, least-privilege
+scope suggestions, group-ownership checks. Two things to know:
+- It is **advisory, never authoritative** — it can only *suggest* inputs; it can't submit, approve, or
+  provision anything. The governed request engine (RBAC/ABAC/SoD) stays the only thing that changes state.
+- In v1 the backend is a **stub**, so the screen is an honest **preview**: send a message and it tells you
+  the assistant isn't enabled yet (rather than faking an answer). It activates here automatically when the
+  assistant track ships. See
+  [assistant-feature-design-and-guardrails.md](assistant-feature-design-and-guardrails.md) for the design.
+
 ### Notifications
 The top-bar **bell** with an unread badge. Click it for your feed (newest first), each with a per-type
 icon; click an item to mark it read, or **Mark all read**.
@@ -250,8 +261,9 @@ headless unit tests on every PR. See the [README](../README.md#running-it) for t
 
 ## Known limitations
 
-- **Assistant** (onboarding wizard helper) is an intentional **stub** in v1 (returns `501`); the full
-  RAG/tools track is deferred.
+- **Assistant** ships as a **preview** — the UI is live but the backend is an intentional **stub**
+  (returns `501`), so it tells you it isn't enabled yet rather than answering; the full RAG/tools track is
+  deferred and lights up the existing screen automatically when it lands.
 - **Notification click-through** marks the item read but does **not yet deep-link** to the underlying
   resource — the frozen `Notification` schema has no routable discriminator yet (a future contract
   change + detail routes).
