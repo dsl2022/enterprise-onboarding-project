@@ -1,0 +1,64 @@
+<div class="page">
+  <app-page-header
+    title="Access catalog"
+    subtitle="Browse requestable resources, roles, and teams — then request access."
+  >
+    <div actions class="filters">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic" class="filter">
+        <mat-label>Type</mat-label>
+        <mat-select [(ngModel)]="typeFilter" (selectionChange)="load()">
+          <mat-option [value]="''">All types</mat-option>
+          @for (t of resourceTypes; track t) {
+            <mat-option [value]="t">{{ typeLabel(t) }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field appearance="outline" subscriptSizing="dynamic" class="filter">
+        <mat-label>Risk</mat-label>
+        <mat-select [(ngModel)]="riskFilter" (selectionChange)="load()">
+          <mat-option [value]="''">All risk</mat-option>
+          @for (r of risks; track r) {
+            <mat-option [value]="r">{{ r }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+    </div>
+  </app-page-header>
+
+  @if (loading()) {
+    <div class="state"><mat-spinner diameter="32" /></div>
+  } @else if (error()) {
+    <div class="card-surface state error">
+      <mat-icon>error_outline</mat-icon>
+      <span>{{ error() }}</span>
+      <button mat-button (click)="load()">Retry</button>
+    </div>
+  } @else if (items().length === 0) {
+    <div class="card-surface">
+      <app-empty-state icon="storefront" heading="No resources match" message="Try clearing the filters." />
+    </div>
+  } @else {
+    <div class="grid">
+      @for (item of items(); track item.id) {
+        <div class="card-surface tile">
+          <div class="tile-head">
+            <span class="tile-name">{{ item.name }}</span>
+            <app-tone-chip [label]="typeLabel(item.type)" tone="neutral" [dot]="false" />
+          </div>
+          <div class="tile-risk">
+            <app-risk-chip [risk]="item.risk" />
+          </div>
+          <p class="tile-desc text-muted">{{ item.description }}</p>
+          <div class="tile-foot">
+            <span class="text-subtle group" [title]="'Mapped group: ' + item.mappedGroup">
+              {{ item.mappedGroup }}
+            </span>
+            @if (auth.can('access.request')) {
+              <button mat-flat-button color="primary" (click)="request(item)">Request access</button>
+            }
+          </div>
+        </div>
+      }
+    </div>
+  }
+</div>
