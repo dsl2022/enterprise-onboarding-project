@@ -84,14 +84,7 @@ export const routes: Routes = [
   {
     path: 'audit',
     canActivate: [authGuard, permissionGuard('audit.read')],
-    loadComponent: () =>
-      import('./features/placeholder/placeholder.component').then((m) => m.PlaceholderComponent),
-    data: {
-      title: 'Audit log',
-      subtitle: 'Tamper-evident, hash-chained activity trail.',
-      status: 'mock',
-      note: 'Audit (Phase 6) is not built on the backend yet — this screen will run on mock data until it lands.',
-    },
+    loadComponent: () => import('./features/audit/audit.component').then((m) => m.AuditComponent),
   },
 
   { path: '**', redirectTo: 'dashboard' },
