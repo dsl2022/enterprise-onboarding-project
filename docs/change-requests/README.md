@@ -31,3 +31,4 @@ gates, where "why did we change this field?" must be answerable months later.
 | [CR-20260628-2235](CR-20260628-2235-v1-contract-access-resubmit.md) | 2026-06-28 22:35 EDT | Phase 5 note | add `/access-requests/{id}/submit` (access resubmit) | Open (candidate) |
 | [CR-20260628-2240](CR-20260628-2240-v1-access-duration-expiry-sweep.md) | 2026-06-28 22:40 EDT | Phase 5 note | time-bound access expiry de-provision sweep | Open (candidate) |
 | [CR-20260629-0030](CR-20260629-0030-v1-groupmember-grant-scope-prod.md) | 2026-06-29 00:30 EDT | Phase 5b note | constrain/monitor tenant-broad GroupMember.ReadWrite.All (prod) | Open (candidate) |
+| [CR-20260629-0723](CR-20260629-0723-v1-teams-scope-abac-delegation.md) | 2026-06-29 07:23 EDT | Issue #95 (5c) | teams = portal-local for v1 (defer group-backing); ABAC team-delegation clarification | Applied (5c PR) |
