@@ -27,3 +27,4 @@ gates, where "why did we change this field?" must be answerable months later.
 | [CR-20260628-1020](CR-20260628-1020-v1-contract-prefreeze.md) | 2026-06-28 10:20 EDT | PR #11 | v1 contract pre-freeze review (#1–#5) | Applied (d0a0834) |
 | [CR-20260628-1056](CR-20260628-1056-v1-contract-rbac-union.md) | 2026-06-28 10:56 EDT | PR #11 | RBAC multi-role union + nits | Applied (09728ea) |
 | [CR-20260628-1416](CR-20260628-1416-v1-phase2-prod-hardening.md) | 2026-06-28 14:16 EDT | PR #13 | v1 Phase 2 data-layer prod-hardening (deferred) | Open |
+| [CR-20260628-2116](CR-20260628-2116-v1-contract-idempotency-422.md) | 2026-06-28 21:16 EDT | PR #80 | add 422 to idempotent POSTs (contract 1.0.1) | Open |

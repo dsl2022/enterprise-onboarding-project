@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Enterprise Onboarding Portal API
-  version: 1.0.0
+  version: 1.0.1
   description: >
     v1 backend contract for the request → approve → provision → audit → notify portal.
     FROZEN (Phase 1) — change only via a new change request (docs/change-requests/). BFF pattern: auth via the
@@ -127,6 +127,7 @@ paths:
         "200": { description: Submitted, content: { application/json: { schema: { $ref: "#/components/schemas/Application" } } } }
         "409": { $ref: "#/components/responses/Conflict" }
         "412": { $ref: "#/components/responses/PreconditionFailed" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
 
   /applications/{id}/decision:
     parameters: [ { $ref: "#/components/parameters/Id" } ]
@@ -142,6 +143,7 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
         "412": { $ref: "#/components/responses/PreconditionFailed" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
 
   /applications/{id}/timeline:
     parameters: [ { $ref: "#/components/parameters/Id" } ]
@@ -189,6 +191,7 @@ paths:
       responses:
         "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/AccessRequest" } } } }
         "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
 
   /access-requests/{id}:
     parameters: [ { $ref: "#/components/parameters/Id" } ]
@@ -212,6 +215,7 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
         "412": { $ref: "#/components/responses/PreconditionFailed" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
 
   /my-access:
     get:
@@ -227,6 +231,7 @@ paths:
       parameters: [ { $ref: "#/components/parameters/IdempotencyKey" } ]
       responses:
         "201": { description: Removal request created, content: { application/json: { schema: { $ref: "#/components/schemas/AccessRequest" } } } }
+        "422": { $ref: "#/components/responses/Unprocessable" }
 
   /review-queue:
     get:
@@ -247,7 +252,7 @@ paths:
       tags: [teams]
       parameters: [ { $ref: "#/components/parameters/IdempotencyKey" } ]
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/TeamCreate" } } } }
-      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Team" } } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Team" } } } }, "422": { $ref: "#/components/responses/Unprocessable" } }
 
   /teams/{id}/members:
     parameters: [ { $ref: "#/components/parameters/Id" } ]
@@ -258,7 +263,7 @@ paths:
       tags: [teams]
       parameters: [ { $ref: "#/components/parameters/IdempotencyKey" } ]
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/TeamMemberAdd" } } } }
-      responses: { "201": { description: Added, content: { application/json: { schema: { $ref: "#/components/schemas/TeamMember" } } } } }
+      responses: { "201": { description: Added, content: { application/json: { schema: { $ref: "#/components/schemas/TeamMember" } } } }, "422": { $ref: "#/components/responses/Unprocessable" } }
 
   /teams/{id}/members/{userId}:
     parameters:
@@ -318,6 +323,7 @@ paths:
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/AssistantChatRequest" } } } }
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AssistantChatResponse" } } } }
+        "422": { $ref: "#/components/responses/Unprocessable" }
         "501": { description: Not implemented (assistant track deferred), content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
 
   /assistant/actions/{id}/approve:
