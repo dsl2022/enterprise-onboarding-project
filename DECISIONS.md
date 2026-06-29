@@ -241,3 +241,12 @@ consultant + architect; conditions folded in.
   management beyond the deferred `secret.rotate` is a future `registry` refinement. Acceptable for v1.
 - Additive (V4 migration + new modules); no infra/TF change in 4a → an `app-deploy` image roll. 40 tests
   green incl. onboarding lifecycle, idempotency, read ABAC, and simulated provisioning to ACTIVE.
+- **Known trade-off (idempotency atomicity):** claim→action→complete are three commits — PENDING is
+  visible immediately so a concurrent loser gets an instant 409 rather than blocking for the whole action.
+  The cost: a crash after the action commits but before `complete()` leaves the key PENDING (retries →
+  409 until the 24h reclaim, side effect orphaned from the key). Acceptable for v1 (bounded by TTL); the
+  alternative (one big transaction) makes losers block. (Architect review of PR #80.)
+- **Contract precision follow-up:** the idempotency layer can return 422 (key reused, different body) on
+  the transition POSTs, but the frozen per-endpoint response lists for `/submit`, `/decision`, etc. don't
+  enumerate 422 (it's documented globally in the contract `info` block). Closed by a follow-up CR adding
+  422 to the idempotent POSTs' response lists — a contract change, so via the change-request governance.
