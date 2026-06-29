@@ -37,7 +37,12 @@ public class AuditProjector implements OutboxEventHandler {
     @Override
     @Transactional
     public void handle(OutboxRecord event) {
-        Map<String, Object> detail = parse(event.payload());
+        // Coerce every detail value to its string form BEFORE hashing and storing. The chain's
+        // verifiability rests on the stored jsonb round-tripping byte-for-byte (jsonb normalizes numbers
+        // and drops duplicate keys); strings survive that, numbers may not. Enforcing it here makes
+        // verify independent of emit-site discipline — a future numeric field can't silently break it
+        // (architect hardening note #1).
+        Map<String, Object> detail = stringify(parse(event.payload()));
         String actor = firstNonBlank(str(detail.get("actor")), str(detail.get("actorId")), "system");
         String effectiveRole = str(detail.get("effectiveRole")); // nullable
 
@@ -55,6 +60,30 @@ public class AuditProjector implements OutboxEventHandler {
                 UUID.randomUUID(), event.id(), actor, effectiveRole, event.eventType(),
                 event.aggregateType(), event.aggregateId(), event.occurredAt().atOffset(ZoneOffset.UTC),
                 writeDetail(detail), prevHash, hash);
+    }
+
+    /** Recursively coerce scalar values to strings (keys + structure preserved; null stays null). */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> stringify(Map<String, Object> in) {
+        Map<String, Object> out = new java.util.LinkedHashMap<>();
+        for (Map.Entry<String, Object> e : in.entrySet()) {
+            out.put(e.getKey(), stringifyValue(e.getValue()));
+        }
+        return out;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Object stringifyValue(Object v) {
+        if (v == null) {
+            return null;
+        }
+        if (v instanceof Map<?, ?> m) {
+            return stringify((Map<String, Object>) m);
+        }
+        if (v instanceof java.util.List<?> list) {
+            return list.stream().map(this::stringifyValue).toList();
+        }
+        return String.valueOf(v);
     }
 
     private Map<String, Object> parse(String payloadJson) {

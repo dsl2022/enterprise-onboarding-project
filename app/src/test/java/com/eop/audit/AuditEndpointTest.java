@@ -96,6 +96,23 @@ class AuditEndpointTest {
     }
 
     @Test
+    void numeric_detail_values_are_coerced_to_strings_so_verify_stays_stable() {
+        // a future emit site adds a numeric (and a float) field — jsonb could normalize these and break the
+        // round-trip, but the projector coerces every detail value to a string, so verify stays valid
+        String rid = "num-" + UUID.randomUUID();
+        outbox.append("request", rid, "request.approved",
+                "{\"actor\":\"judy\",\"effectiveRole\":\"ADMIN\",\"count\":5,\"ratio\":1.10}");
+        drainAll();
+
+        assertThat(audit.verify(auditor).valid()).isTrue();
+        AuditPage page = audit.query(auditor, "judy", null, null, null, null, null, 20);
+        assertThat(page.items()).anySatisfy(e -> {
+            assertThat(e.detail().get("count")).isEqualTo("5");                 // number → string
+            assertThat(e.detail().get("ratio")).isInstanceOf(String.class);    // float → string (no jsonb normalization risk)
+        });
+    }
+
+    @Test
     void query_filters_by_actor_and_requires_audit_read() {
         String actor = "ivan-" + UUID.randomUUID();
         seedAndAudit("q-" + UUID.randomUUID(), actor, "ADMIN");

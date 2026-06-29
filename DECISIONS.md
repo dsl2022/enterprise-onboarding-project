@@ -490,9 +490,12 @@ green-lit the design note with four decisions + a fifth (backlog) + three correc
 **Correctness must-addresses (folded into the build):**
 - **(A) jsonb canonicalization round-trip.** The hash pre-image is canonicalized by one shared `AuditHasher`
   used at BOTH insert and verify (sorted keys, recursive), so verify re-hashes a faithful row identically.
-  `detail` is stored as `jsonb` but its values are **strings only** (every emit site) so a store→read→
-  re-canonicalize is byte-stable (jsonb normalizes numbers / drops dup keys — not in play). Guarded by a
-  golden-vector unit test (pinned canonical string) **and** a Postgres round-trip integration test.
+  `detail` is stored as `jsonb` but its values are **strings only** so a store→read→re-canonicalize is
+  byte-stable (jsonb normalizes numbers / drops dup keys). Originally an emit-site convention; on architect
+  hardening note #1 the **projector now coerces every detail value to its string form** before
+  hashing/storing, so verifiability is independent of emit discipline (a future numeric field can't silently
+  break verify). Guarded by a golden-vector unit test (pinned canonical string), a Postgres round-trip
+  integration test, **and** a numeric-detail-coercion test.
 - **(B) `seq` is not gap-free.** `GENERATED ALWAYS AS IDENTITY` consumes values on rollback (the 23505
   idempotency path, any transient failure), so seq has gaps. Harmless: integrity is `prev_hash` linkage, not
   contiguity. `seq` is deliberately **excluded from the hash pre-image** (DB-generated, unknowable
