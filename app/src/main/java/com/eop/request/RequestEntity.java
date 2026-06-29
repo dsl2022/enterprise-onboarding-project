@@ -52,6 +52,14 @@ public class RequestEntity implements SodSubject, Ownable, Persistable<UUID> {
     @Column(name = "external_ref")
     private String externalRef;
 
+    /** Reaper backoff counter (4b): bumped on each stale-PROVISIONING re-claim. */
+    @Column(name = "provision_attempts")
+    private int provisionAttempts;
+
+    /** Reaper lease / backoff gate (4b): NULL means due now. See V5 migration. */
+    @Column(name = "next_attempt_at")
+    private Instant nextAttemptAt;
+
     private int version;
 
     @Column(name = "created_at")
@@ -75,6 +83,8 @@ public class RequestEntity implements SodSubject, Ownable, Persistable<UUID> {
         this.submittedBy = submittedBy;
         this.payload = payload == null ? "{}" : payload;
         this.version = 0;
+        this.provisionAttempts = 0;
+        this.nextAttemptAt = null;
         this.createdAt = Instant.now();
         this.updatedAt = Instant.now();
         this.isNew = true;
@@ -126,6 +136,14 @@ public class RequestEntity implements SodSubject, Ownable, Persistable<UUID> {
 
     public String getExternalRef() {
         return externalRef;
+    }
+
+    public int getProvisionAttempts() {
+        return provisionAttempts;
+    }
+
+    public Instant getNextAttemptAt() {
+        return nextAttemptAt;
     }
 
     public int getVersion() {

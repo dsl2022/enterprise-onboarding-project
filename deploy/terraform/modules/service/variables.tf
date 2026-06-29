@@ -67,3 +67,12 @@ variable "redis_port" {
   type    = number
   default = 6379
 }
+
+# Phase 4b: flip to true ONLY AFTER admin consent for Application.ReadWrite.OwnedBy is granted (RUNBOOK).
+# false keeps the SimulatedProvisioner active; true sets EOP_PROVISIONING_SIMULATE=false + enables the
+# scheduler so the worker provisions real Entra app registrations over the WIF token.
+variable "provisioning_real" {
+  description = "Enable real Graph app-registration provisioning (requires admin consent already granted)."
+  type        = bool
+  default     = false
+}

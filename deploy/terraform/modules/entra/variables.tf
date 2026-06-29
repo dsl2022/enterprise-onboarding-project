@@ -59,3 +59,14 @@ variable "group_read_all_role_id" {
   type        = string
   default     = "5b567255-7703-4780-807c-7be8301ae99b"
 }
+
+# Phase 4b: app-registration provisioning. The workload mints app registrations via Graph over the WIF
+# token; OwnedBy (not the broader ReadWrite.All) keeps it least-privilege — it creates a registration +
+# client id, NOT a service principal (the SP is a future CR). Verify this GUID against the live Graph SP
+# (`az ad sp show --id 00000003-0000-0000-c000-000000000000 --query "appRoles[?value=='Application.ReadWrite.OwnedBy'].id"`)
+# before apply, like every Graph role id — never trust a constant blindly.
+variable "app_readwrite_ownedby_role_id" {
+  description = "Graph application app-role id for Application.ReadWrite.OwnedBy (verify against the live Graph SP)."
+  type        = string
+  default     = "18a4783c-866b-4cc7-a460-3d5e5662c884"
+}

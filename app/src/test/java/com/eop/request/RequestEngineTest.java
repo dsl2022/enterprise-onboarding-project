@@ -14,6 +14,7 @@ import com.eop.authz.PortalRole;
 import com.eop.platform.ConflictException;
 import com.eop.platform.OutboxWriter;
 import com.eop.platform.PreconditionFailedException;
+import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -78,7 +79,8 @@ class RequestEngineTest {
         assertThat(approved.getStatus()).isEqualTo(RequestStatus.APPROVED);
         assertThat(approved.getApprover()).isEqualTo("ops-1");
 
-        assertThat(service.markProvisioning(req.getId()).getStatus()).isEqualTo(RequestStatus.PROVISIONING);
+        assertThat(service.markProvisioning(req.getId(), Instant.now().plusSeconds(300)).getStatus())
+                .isEqualTo(RequestStatus.PROVISIONING);
         var active = service.markProvisioned(req.getId(), "client-xyz");
         assertThat(active.getStatus()).isEqualTo(RequestStatus.ACTIVE);
         assertThat(active.getExternalRef()).isEqualTo("client-xyz");
@@ -98,7 +100,7 @@ class RequestEngineTest {
         assertThat(req.getStatus()).isEqualTo(RequestStatus.UNDER_REVIEW); // auto-advanced (no separate submit)
 
         service.decide(ops, req.getId(), Decision.APPROVE, "ok", req.getVersion());
-        service.markProvisioning(req.getId());
+        service.markProvisioning(req.getId(), Instant.now().plusSeconds(300));
         assertThat(service.markProvisioned(req.getId(), null).getStatus()).isEqualTo(RequestStatus.GRANTED);
     }
 
@@ -223,7 +225,7 @@ class RequestEngineTest {
         var ops = principal("ops-1", Set.of(PortalRole.SSO_OPERATIONS), null);
         var req = service.create(RequestType.ACCESS, "user-9", "user-9", "{}");
         service.decide(ops, req.getId(), Decision.APPROVE, "ok", req.getVersion());
-        service.markProvisioning(req.getId());
+        service.markProvisioning(req.getId(), Instant.now().plusSeconds(300));
 
         service.provisioningFailed(req.getId(), "Graph 403: consent missing");
 

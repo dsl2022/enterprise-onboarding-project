@@ -13,6 +13,20 @@ spring:
 app:
   base-url: ${APP_BASE_URL:}
 
+# Onboarding provisioning (Phase 4). `simulate` defaults true everywhere (the SimulatedProvisioner returns
+# a synthetic client id) so local + CI + tests need no Graph/consent; deployment flips it to false (env, in
+# the ECS service module) to activate the real GraphProvisioner — which also requires wif.enabled=true. The
+# scheduler is off by default (tests call runOnce() directly) and on in deployment.
+eop:
+  provisioning:
+    # simulate: true       # set EOP_PROVISIONING_SIMULATE=false in deployment (ECS service env)
+    # scheduler: true      # set EOP_PROVISIONING_SCHEDULER=true in deployment
+    poll-ms: ${EOP_PROVISIONING_POLL_MS:10000}
+    lease-seconds: ${EOP_PROVISIONING_LEASE_SECONDS:300}        # reaper lease; > worst-case provision duration
+    backoff-cap-seconds: ${EOP_PROVISIONING_BACKOFF_CAP_SECONDS:3600}
+  graph:
+    base-url: ${EOP_GRAPH_BASE_URL:https://graph.microsoft.com/v1.0}
+
 # Actuator: keep the surface tiny. /healthz is our own controller; actuator stays internal-only.
 management:
   endpoints:

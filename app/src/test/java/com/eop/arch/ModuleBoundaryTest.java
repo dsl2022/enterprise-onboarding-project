@@ -61,12 +61,17 @@ class ModuleBoundaryTest {
                     .should().onlyDependOnClassesThat()
                     .resideInAnyPackage("com.eop.onboarding..", "com.eop.request..", "com.eop.authz..",
                             "com.eop.platform..", "com.eop.directory..", "java..", "jakarta..",
-                            "org.springframework..", "com.fasterxml..");
+                            "org.springframework..", "org.slf4j..", "com.fasterxml..");
 
-    /** {@code directory} is a leaf provisioning port — it depends on no other eop module. */
+    /**
+     * {@code directory} is a near-leaf provisioning port. 4b's GraphProvisioner reuses the WIF app-only
+     * token, so {@code directory → wif} is allowed; it still depends on no other eop module (and wif does
+     * not depend back on directory, so no cycle).
+     */
     @ArchTest
     static final ArchRule directory_is_a_leaf_port =
             classes().that().resideInAPackage("com.eop.directory..")
                     .should().onlyDependOnClassesThat()
-                    .resideInAnyPackage("com.eop.directory..", "java..", "org.slf4j..", "org.springframework..");
+                    .resideInAnyPackage("com.eop.directory..", "com.eop.wif..", "java..", "org.slf4j..",
+                            "org.springframework..");
 }
