@@ -379,3 +379,42 @@ a real deploy.** (Architect caught it on the live apply.)
 - **Lesson:** a shared conditional flag across independently-activated verticals is a latent deploy trap
   that unit/Testcontainers (simulated-default) tests can't see — boot-with-real-flag smoke tests are the
   guard. Carry this pattern to any future vertical (audit/notify/teams).
+
+## ADR-0019 — Phase 5b: real Entra group-membership provisioning (Graph over WIF)
+**Context:** swap `SimulatedGroupProvisioner` for the real one so an approved access request adds the
+requester to the resource's Entra group (and a removal removes them), over the WIF token with
+`GroupMember.ReadWrite.All`. The consent-gated half of access; everything around it (worker, reaper,
+`access_grant` projection, atomic completion, per-vertical `access.simulate` flag, `access_provisioning_real`
+TF var) shipped in 5a + the flag-fix. Reviewed (Phase 5 + 5b note); architect must-dos folded in.
+**Decision:**
+- **oid was already canonical** — `PrincipalFactory` maps `realUserId` from the `oid` claim (object id),
+  not the app-pairwise `sub`. So SoD/ABAC/audit AND the new group-member id all key off `oid` (a real
+  directory object). No principal change needed — the load-bearing 5b risk was already handled in 3a.
+- **`directory.GraphGroupMembershipProvisioner`** (active `eop.provisioning.access.simulate=false`; needs
+  `wif.enabled=true`): `POST /groups/{id}/members/$ref` (body `@odata.id` → `directoryObjects/{oid}`) and
+  `DELETE …/members/{oid}/$ref`. Reuses the 4b 429/`Retry-After`/backoff idiom.
+- **Idempotent by specific Graph signal** (architect must-fix, NOT blanket 400/404): add→already-member is a
+  400 with message "…already exist" → success (tolerant, case-insensitive — Graph gives no distinct code);
+  remove→not-member is a 404 → success; a 404 on add (bad group/object) and any other 400 are rethrown
+  (surface). **403 is its own loud "missing GroupMember.ReadWrite.All consent" error**, never folded into
+  the 400 path. Composes with 5a's `completeGrant` (findByRequestId + findActive) → Graph-idempotent +
+  DB-idempotent = reaper/retry safe end-to-end.
+- **addMember returns a deterministic marker** (`{groupId}:{oid}`) since Graph add is 204 (no id) — this
+  arms the worker's DB-first `external_ref` skip so a re-provision doesn't re-call Graph (force the Graph
+  path in live idempotency tests by nulling `external_ref`).
+- **Symmetric wiring guard:** `ProvisioningWiringFullyRealTest` boots with BOTH `onboarding.simulate=false`
+  AND `access.simulate=false` and asserts both real provisioners wire — closes the symmetric form of the 4b
+  shared-flag crash (a future access flip can't silently break wiring).
+- **TF:** `modules/entra` declares `GroupMember.ReadWrite.All` (GUID `dbaae8cf-…`, **resolved live**);
+  activation is `access_provisioning_real=true` → `EOP_PROVISIONING_ACCESS_SIMULATE=false`. Consent granted
+  the same surgical `appRoleAssignment` way as OwnedBy; declare → consent → flip.
+**Consequences / scope limits:**
+- **Tenant-broad grant:** Graph has no per-group app-only scope for membership writes, so
+  `GroupMember.ReadWrite.All` lets the app touch ANY group. Acceptable for v1 dev; constrain/monitor for
+  prod ([[CR-20260629-0030]]).
+- **Dev test groups must be static (assigned) security groups** — not dynamic (manual add → 400) and not
+  role-assignable (membership writes need extra privilege → 403). Mapped-group object ids are injected at
+  test time (not committed) — catalog management is a future admin CR.
+- Real end-to-end is the post-merge apply + GA consent + seed-and-watch (grant → in group → /my-access;
+  removal → out of group → `removed_at`, request status GRANTED-means-completed), mirroring the 4b sign-off.
+- Additive: one new provisioner + TF permission + tests; the access machine is unchanged. Build green.
