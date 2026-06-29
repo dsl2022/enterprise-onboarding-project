@@ -84,4 +84,17 @@ class ModuleBoundaryTest {
                     .should().onlyDependOnClassesThat()
                     .resideInAnyPackage("com.eop.directory..", "com.eop.wif..", "java..", "org.slf4j..",
                             "org.springframework..");
+
+    /**
+     * {@code teams} (Phase 5c) is direct CRUD — depends ONLY on {@code authz} + {@code platform} (+ the
+     * JDK/framework), NEVER on {@code request}. Teams have no approval/SoD/provisioning lifecycle, so they
+     * must not reach the engine (a leak would also fail {@code only_type_modules_use_the_request_engine},
+     * which doesn't list teams; this makes the invariant explicit — Pin D).
+     */
+    @ArchTest
+    static final ArchRule teams_module_boundary =
+            classes().that().resideInAPackage("com.eop.teams..")
+                    .should().onlyDependOnClassesThat()
+                    .resideInAnyPackage("com.eop.teams..", "com.eop.authz..", "com.eop.platform..",
+                            "java..", "jakarta..", "org.springframework..", "com.fasterxml..");
 }
