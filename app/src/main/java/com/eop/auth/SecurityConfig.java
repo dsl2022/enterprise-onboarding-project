@@ -12,6 +12,8 @@ import org.springframework.security.oauth2.client.registration.ClientRegistratio
 import org.springframework.security.oauth2.client.web.DefaultOAuth2AuthorizationRequestResolver;
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestCustomizers;
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestResolver;
+import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
+import java.util.function.Consumer;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
@@ -94,11 +96,24 @@ public class SecurityConfig {
         };
     }
 
-    // Force PKCE even though this is a confidential client (defense in depth; brief requires PKCE).
+    // Force PKCE even though this is a confidential client (defense in depth; brief requires PKCE), AND
+    // force a credential prompt on every sign-in (prompt=login). RP-initiated logout clears the BFF SESSION
+    // but Entra's own browser SSO session survives, so the next /oauth2/authorization/entra would otherwise
+    // silently re-issue a token — wrong for the shared demo Super-Admin account handed to a reviewer on a
+    // shared machine. prompt=login guarantees the password prompt regardless of IdP session state (#149).
     private OAuth2AuthorizationRequestResolver pkceResolver(ClientRegistrationRepository repo) {
         var resolver = new DefaultOAuth2AuthorizationRequestResolver(repo, "/oauth2/authorization");
-        resolver.setAuthorizationRequestCustomizer(OAuth2AuthorizationRequestCustomizers.withPkce());
+        resolver.setAuthorizationRequestCustomizer(authorizationRequestCustomizer());
         return resolver;
+    }
+
+    /** PKCE (code_challenge) + {@code prompt=login}, composed. Package-private so it's unit-testable (#149). */
+    static Consumer<OAuth2AuthorizationRequest.Builder> authorizationRequestCustomizer() {
+        Consumer<OAuth2AuthorizationRequest.Builder> pkce = OAuth2AuthorizationRequestCustomizers.withPkce();
+        return b -> {
+            pkce.accept(b);                                        // keep PKCE (code_challenge still emitted)
+            b.additionalParameters(p -> p.put("prompt", "login")); // always prompt for credentials
+        };
     }
 
     /** Default (no `auth` profile): permit everything so local/CI boots without Entra. */
