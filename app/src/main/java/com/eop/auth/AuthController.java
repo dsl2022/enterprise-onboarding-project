@@ -1,5 +1,6 @@
 package com.eop.auth;
 
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
@@ -7,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.view.RedirectView;
 
@@ -20,9 +22,20 @@ import org.springframework.web.servlet.view.RedirectView;
 @RestController
 public class AuthController {
 
-    /** Kicks off login by handing to Spring's authorization-request endpoint for the `entra` client. */
+    /**
+     * Kicks off login by handing to Spring's authorization-request endpoint for the `entra` client.
+     * Optionally remembers a same-origin {@code returnTo} so the SPA (served at {@code /app}) lands back
+     * where it started after the OAuth round-trip, rather than the default {@code /}. The value survives
+     * the round-trip in the session (migrated across Spring's session-fixation change) and is consumed by
+     * the success handler in {@link SecurityConfig}. Validated to a relative path → no open redirect.
+     */
     @GetMapping("/auth/login")
-    public RedirectView login() {
+    public RedirectView login(
+            @RequestParam(name = "returnTo", required = false) String returnTo,
+            HttpServletRequest request) {
+        if (SafeRelativePath.isValid(returnTo)) {
+            request.getSession(true).setAttribute(SafeRelativePath.RETURN_TO_SESSION_ATTR, returnTo);
+        }
         return new RedirectView("/oauth2/authorization/entra");
     }
 
