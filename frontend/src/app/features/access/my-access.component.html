@@ -1,0 +1,71 @@
+<div class="page">
+  <app-page-header title="My access" subtitle="What you currently hold, and your requests in progress." />
+
+  @if (loading()) {
+    <div class="state"><mat-spinner diameter="32" /></div>
+  } @else if (error()) {
+    <div class="card-surface state error">
+      <mat-icon>error_outline</mat-icon>
+      <span>{{ error() }}</span>
+      <button mat-button (click)="load()">Retry</button>
+    </div>
+  } @else {
+    <section class="block">
+      <h2 class="block-title">Currently held</h2>
+      @if (held().length === 0) {
+        <div class="card-surface">
+          <app-empty-state icon="badge" heading="You don't hold any access yet"
+            message="Browse the catalog to request a resource, role, or team.">
+            <a mat-flat-button color="primary" routerLink="/access/catalog">Browse the catalog</a>
+          </app-empty-state>
+        </div>
+      } @else {
+        <div class="card-surface list">
+          @for (item of held(); track item.resourceId) {
+            <div class="held-row">
+              <div class="held-info">
+                <span class="held-name">{{ item.resourceName }}</span>
+                <span class="text-subtle">Granted {{ item.grantedAt | date: 'mediumDate' }}</span>
+              </div>
+              @if (auth.can('myaccess.removal.request')) {
+                <button mat-stroked-button [disabled]="removing() === item.resourceId"
+                  (click)="requestRemoval(item)">
+                  {{ removing() === item.resourceId ? 'Requesting…' : 'Request removal' }}
+                </button>
+              }
+            </div>
+          }
+        </div>
+      }
+    </section>
+
+    @if (requests().length > 0) {
+      <section class="block">
+        <h2 class="block-title">Your requests</h2>
+        <div class="card-surface list">
+          @for (req of requests(); track req.id) {
+            <div class="req-row">
+              <div class="req-main">
+                <span class="req-name">{{ req.resourceName }}</span>
+                @if (req.kind === 'removal') {
+                  <app-tone-chip label="Removal" tone="neutral" [dot]="false" />
+                }
+                <app-status-chip [status]="req.status" />
+              </div>
+              <div class="req-meta text-muted">
+                <span class="req-just">{{ req.justification }}</span>
+                <span class="text-subtle">{{ req.createdAt | date: 'medium' }}</span>
+              </div>
+              @if (req.status === 'CHANGES_REQUESTED') {
+                <p class="req-hint">
+                  Changes were requested. In v1 this can't be resubmitted —
+                  <a routerLink="/access/catalog">open a new request</a> instead.
+                </p>
+              }
+            </div>
+          }
+        </div>
+      </section>
+    }
+  }
+</div>

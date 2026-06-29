@@ -52,26 +52,13 @@ export const routes: Routes = [
     path: 'access/catalog',
     canActivate: [authGuard, permissionGuard('catalog.read')],
     loadComponent: () =>
-      import('./features/placeholder/placeholder.component').then((m) => m.PlaceholderComponent),
-    data: {
-      title: 'Access catalog',
-      subtitle: 'Browse requestable resources, roles, and teams — then request access.',
-      status: 'live',
-      note: 'The catalog grid and request-access flow build on the live /catalog and /access-requests endpoints.',
-    },
+      import('./features/access/catalog.component').then((m) => m.CatalogComponent),
   },
-
   {
     path: 'access/my-access',
     canActivate: [authGuard, permissionGuard('myaccess.read')],
     loadComponent: () =>
-      import('./features/placeholder/placeholder.component').then((m) => m.PlaceholderComponent),
-    data: {
-      title: 'My access',
-      subtitle: 'What you currently hold, and how to request removal.',
-      status: 'live',
-      note: '/my-access is the source of truth for currently-held resources.',
-    },
+      import('./features/access/my-access.component').then((m) => m.MyAccessComponent),
   },
 
   {
