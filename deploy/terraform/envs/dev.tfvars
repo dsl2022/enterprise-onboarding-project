@@ -22,8 +22,10 @@ entra_app_role_assignments = [
 # entra_require_app_role_assignment = true
 
 # ---- Phase 4b/5b: per-vertical real provisioning ----
-# Onboarding (4b) real: Application.ReadWrite.OwnedBy was admin-consented on the eop-dev-app SP (2026-06-29),
-# consent in place BEFORE the token mint. This flips only EOP_PROVISIONING_ONBOARDING_SIMULATE=false; the
-# access vertical stays simulated (its real provisioner is 5b and GroupMember.ReadWrite.All isn't consented).
+# Both verticals real: Application.ReadWrite.OwnedBy (4b) + GroupMember.ReadWrite.All (5b) are both
+# admin-consented on the eop-dev-app SP (2026-06-29), consent in place BEFORE the flip. access=true sets
+# EOP_PROVISIONING_ACCESS_SIMULATE=false → the real GraphGroupMembershipProvisioner; the post-flip task
+# roll mints a fresh token that carries GroupMember (access was simulated until now, so no cached pre-consent
+# token issue).
 onboarding_provisioning_real = true
-access_provisioning_real     = false
+access_provisioning_real     = true
