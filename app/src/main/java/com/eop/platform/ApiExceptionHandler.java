@@ -53,6 +53,13 @@ public class ApiExceptionHandler {
         return withCorrelation(problem);
     }
 
+    @ExceptionHandler(NotImplementedException.class)
+    public ProblemDetail handleNotImplemented(NotImplementedException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_IMPLEMENTED, ex.getMessage());
+        problem.setTitle("Not Implemented");
+        return withCorrelation(problem);
+    }
+
     private ProblemDetail withCorrelation(ProblemDetail problem) {
         problem.setProperty("correlationId", MDC.get(CorrelationIdFilter.MDC_KEY));
         return problem;
