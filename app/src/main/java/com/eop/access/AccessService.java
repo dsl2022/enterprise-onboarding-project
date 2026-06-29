@@ -80,6 +80,11 @@ public class AccessService {
         }
         CatalogEntity resource = catalog.findById(body.resourceId())
                 .orElseThrow(() -> new UnprocessableException("unknown catalog resource: " + body.resourceId()));
+        // Reject a grant for a resource the user already holds (cleanest fix for the active-grant unique
+        // index edge case — don't let a duplicate enter review only to fail at completion).
+        if (grants.findActive(principal.realUserId(), body.resourceId()).isPresent()) {
+            throw new UnprocessableException("you already hold access to " + body.resourceId());
+        }
         Map<String, Object> payload = basePayload(resource, KIND_GRANT, body.justification(), body.duration());
         RequestEntity created = engine.create(RequestType.ACCESS, principal.realUserId(),
                 principal.realUserId(), write(payload));

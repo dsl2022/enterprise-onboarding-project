@@ -340,6 +340,11 @@ direct CRUD, no engine). Reviewed by consultant + architect; must-dos folded in.
   request" ([[CR-20260628-2235]]).
 - `kind` filter on `GET /access-requests` is applied **in-memory** on the page (kind lives in the payload,
   not a column) — minor pagination imprecision, acceptable at v1 dev scale.
+- **Duplicate-grant edge case (architect PR #98 review):** the active-grant unique index could trap a
+  double-approved request in PROVISIONING (unique violation → rollback → reaper loop). Closed at both ends:
+  `create()` rejects a grant for an already-held resource (**422**); `completeGrant` skips the insert when an
+  active grant already exists for (user, resource) — so a double-approval never trips the index and, in the
+  rare truly-concurrent case, self-heals on the next reaper pass instead of looping.
 - Known matrix gaps unchanged: no lean requester role; `ROLE`/`TEAM` catalog = governance groups not
   portal-role elevation; approvers can't swap role/scope at decision (frozen `Decision` enum).
 - Additive: `V6` migration + new `access` module + the type-scope engine tweak; no TF/consent in 5a. 57

@@ -121,4 +121,36 @@ class AccessLifecycleTest {
         assertThatThrownBy(() -> access.requestRemoval(owner, "aws-prod"))
                 .isInstanceOf(UnprocessableException.class);
     }
+
+    @Test
+    void duplicate_request_for_an_already_held_resource_is_422() {
+        var owner = principal("owner-dup", PortalRole.APPLICATION_OWNER);
+        var ops = principal("ops-dup", PortalRole.SSO_OPERATIONS);
+        var grant = access.create(owner, new AccessRequestCreate("aws-dev", "first", null));
+        access.decide(ops, UUID.fromString(grant.request().id()), new DecisionRequest(Decision.APPROVE, "ok"), null);
+        provisioning.runOnce();
+
+        // Already holds aws-dev → a second grant request is rejected at create time.
+        assertThatThrownBy(() -> access.create(owner, new AccessRequestCreate("aws-dev", "again", null)))
+                .isInstanceOf(UnprocessableException.class);
+    }
+
+    @Test
+    void double_approval_of_the_same_resource_is_harmless_one_grant_row() {
+        // Two requests for the same resource can coexist before either is granted (no create-time block yet),
+        // both get approved, both provision — completion must NOT trip the active-grant unique index, and
+        // my-access must show exactly one entry.
+        var owner = principal("owner-race", PortalRole.APPLICATION_OWNER);
+        var ops = principal("ops-race", PortalRole.SSO_OPERATIONS);
+        var r1 = access.create(owner, new AccessRequestCreate("aws-dev", "one", null));
+        var r2 = access.create(owner, new AccessRequestCreate("aws-dev", "two", null));
+        access.decide(ops, UUID.fromString(r1.request().id()), new DecisionRequest(Decision.APPROVE, "ok"), null);
+        access.decide(ops, UUID.fromString(r2.request().id()), new DecisionRequest(Decision.APPROVE, "ok"), null);
+
+        provisioning.runOnce();
+
+        assertThat(access.get(ops, UUID.fromString(r1.request().id())).request().status()).isEqualTo("GRANTED");
+        assertThat(access.get(ops, UUID.fromString(r2.request().id())).request().status()).isEqualTo("GRANTED");
+        assertThat(access.myAccess(owner)).filteredOn(i -> i.resourceId().equals("aws-dev")).hasSize(1);
+    }
 }

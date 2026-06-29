@@ -32,7 +32,10 @@ public class AccessGrantService {
     public void completeGrant(UUID requestId, String resourceId, String resourceName, String userId,
             Instant expiresAt, String externalRef) {
         engine.markProvisioned(requestId, externalRef);
-        if (grants.findByRequestId(requestId).isEmpty()) {
+        // Idempotent on this request AND on the (user, resource) active grant — so a rare double-approval of
+        // the same resource for the same user does NOT hit the active-grant unique index (which would roll
+        // back and trap the row in PROVISIONING, reaper-looping). The user already holds it = desired state.
+        if (grants.findByRequestId(requestId).isEmpty() && grants.findActive(userId, resourceId).isEmpty()) {
             grants.save(new AccessGrantEntity(UUID.randomUUID(), resourceId, resourceName, userId, requestId,
                     Instant.now(), expiresAt));
         }
