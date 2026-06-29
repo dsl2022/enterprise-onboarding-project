@@ -542,9 +542,12 @@ the design note with decisions 1–5 as recommended and catches A–D folded in.
   a Super Admin impersonating sees/marks THEIR own feed (same ABAC-on-the-real-principal rule as audit/SoD).
 - **Self-suppression (catch D).** `recipient == actor` → no notification (don't tell someone about their own
   action, e.g. a Super Admin who adds themselves to a team).
-- **v1 recipient model (decision 4).** Notify the individual already in the event — requester on
-  `request.{approved,rejected,changes_requested,active,granted,provisioning_failed}`, affected member on
-  `team.member.{added,removed}`. No directory enumeration. The **reviewer-queue fan-out** (role→all
+- **v1 recipient model (decision 4 + architect post-approval note).** Notify the individual already in the
+  event — requester on **terminal/decision** outcomes `request.{approved,rejected,changes_requested,active,
+  granted}`, affected member on `team.member.{added,removed}`. **`request.provisioning_failed` is
+  deliberately NOT notifiable** — provisioning auto-retries (no terminal FAILED state in v1), so notifying on
+  it would be repeat noise + a confusing problem-then-success sequence; a real dead-letter event is the right
+  trigger if ops wants failure alerts. No directory enumeration. The **reviewer-queue fan-out** (role→all
   reviewers) is **deferred** — it needs the same Graph directory capability as oid→email; light them up
   together (CR-20260629-1610).
 - **In-app is the v1 channel; SES deferred (decisions 2+3).** The in-app feed (guaranteed, no external dep,

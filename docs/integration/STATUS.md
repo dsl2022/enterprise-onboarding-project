@@ -75,8 +75,9 @@ DB-immutable (UPDATE/DELETE denied). Events from before 6a are **not** backfille
 
 Notifications are **derived** (no create endpoint): a SEPARATE outbox consumer (decoupled from audit so it
 can never stall the hash chain) fans events out to the people in them. **v1 recipients = the individual named
-in the event** — the **requester** on a decision/provisioning outcome (`approved`/`rejected`/
-`changes_requested`/`active`/`granted`/`provisioning_failed`), the **affected member** on a team add/remove.
+in the event** — the **requester** on a decision/terminal-provisioning outcome (`approved`/`rejected`/
+`changes_requested`/`active`/`granted`), the **affected member** on a team add/remove. (`provisioning_failed`
+is **not** notified — it auto-retries, so it would be repeat noise + a confusing problem-then-success run.)
 Self-actions are suppressed (you're not told about your own action). `createdAt` = the event time (causal
 order), not insert time. **Deferred:** reviewer-queue fan-out (notify all reviewers — needs role→user
 resolution) and **email/SES** (in-app is the v1 channel; SES + oid→email is a tracked follow-up,

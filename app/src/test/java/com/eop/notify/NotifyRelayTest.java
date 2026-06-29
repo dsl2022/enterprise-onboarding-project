@@ -108,6 +108,10 @@ class NotifyRelayTest {
     void non_notifiable_events_produce_nothing_and_team_add_notifies_member() {
         String created = "ncreated-" + UUID.randomUUID();
         outbox.append("request", created, "request.created", reqPayload(created, "erin", "erin"));
+        // provisioning_failed is intentionally NOT notifiable — it auto-retries (no terminal FAILED state),
+        // so notifying would be repeat noise + a confusing problem-then-success sequence (architect note).
+        String failed = "nfail-" + UUID.randomUUID();
+        outbox.append("request", failed, "request.provisioning_failed", reqPayload(failed, "erin", "system"));
         String added = "nadd-" + UUID.randomUUID();
         outbox.append("team", added, "team.member.added",
                 "{\"teamId\":\"" + added + "\",\"userId\":\"frank\",\"actorId\":\"owner-z\",\"actor\":\"owner-z\"}");
@@ -115,6 +119,8 @@ class NotifyRelayTest {
 
         assertThat(jdbc.queryForObject("SELECT count(*) FROM notify.notifications WHERE resource_ref = ?",
                 Long.class, created)).isZero();                 // request.created is not notifiable
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM notify.notifications WHERE resource_ref = ?",
+                Long.class, failed)).isZero();                  // request.provisioning_failed is not notifiable
         assertThat(notifCount("frank", added)).isEqualTo(1L);   // the added member is notified
     }
 

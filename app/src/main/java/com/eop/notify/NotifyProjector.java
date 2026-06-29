@@ -58,9 +58,12 @@ public class NotifyProjector {
     /** The oid this event should notify, pulled straight from the payload (no directory lookup). */
     private String recipientFor(String eventType, Map<String, Object> detail) {
         return switch (eventType) {
+            // Decision + terminal-provisioning outcomes only. request.provisioning_failed is deliberately
+            // NOT here: provisioning auto-retries (no terminal FAILED state in v1), so notifying on it would
+            // create repeat noise + a confusing problem-then-success sequence. Notify on terminal outcomes;
+            // a real dead-letter event is the right trigger if ops needs failure alerts (architect note).
             case "request.approved", "request.rejected", "request.changes_requested",
-                    "request.active", "request.granted", "request.provisioning_failed" ->
-                    str(detail.get("requester"));
+                    "request.active", "request.granted" -> str(detail.get("requester"));
             case "team.member.added", "team.member.removed" -> str(detail.get("userId"));
             default -> null;
         };
@@ -76,8 +79,6 @@ public class NotifyProjector {
                     new Content("Changes requested", "Your request needs changes before it can proceed.");
             case "request.active" -> new Content("Application is ready", "Your onboarding request is now active.");
             case "request.granted" -> new Content("Access granted", "Your access request was granted.");
-            case "request.provisioning_failed" ->
-                    new Content("Provisioning issue", "We hit a problem provisioning your request; it will retry.");
             case "team.member.added" -> new Content("Added to a team", "You were added to a team.");
             case "team.member.removed" -> new Content("Removed from a team", "You were removed from a team.");
             default -> null;
