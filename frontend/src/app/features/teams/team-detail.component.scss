@@ -1,0 +1,54 @@
+.state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-7);
+}
+.state.error {
+  color: var(--status-danger-fg);
+  justify-content: flex-start;
+}
+
+.list {
+  padding: var(--space-1) 0;
+}
+
+.member-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-5);
+  border-bottom: 1px solid var(--border);
+}
+
+.member-row:last-child {
+  border-bottom: none;
+}
+
+.member-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--surface-sunken);
+  color: var(--text-subtle);
+  font-size: 13px;
+}
+
+.uid {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

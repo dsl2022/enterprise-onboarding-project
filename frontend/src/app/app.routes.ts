@@ -72,13 +72,13 @@ export const routes: Routes = [
     path: 'teams',
     canActivate: [authGuard, permissionGuard('team.read')],
     loadComponent: () =>
-      import('./features/placeholder/placeholder.component').then((m) => m.PlaceholderComponent),
-    data: {
-      title: 'Teams',
-      subtitle: 'Teams and their members.',
-      status: 'mock',
-      note: 'Teams (Phase 5c) is not built on the backend yet — this screen will run on mock data until it lands.',
-    },
+      import('./features/teams/teams-list.component').then((m) => m.TeamsListComponent),
+  },
+  {
+    path: 'teams/:id',
+    canActivate: [authGuard, permissionGuard('team.read')],
+    loadComponent: () =>
+      import('./features/teams/team-detail.component').then((m) => m.TeamDetailComponent),
   },
 
   {
