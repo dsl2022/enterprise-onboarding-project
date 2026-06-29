@@ -1,0 +1,93 @@
+<mat-sidenav-container class="shell">
+  <mat-sidenav
+    #drawer
+    class="sidenav"
+    [mode]="sidenavMode()"
+    [opened]="!handset()"
+    [fixedInViewport]="handset()"
+  >
+    <nav class="nav" aria-label="Primary">
+      @for (group of visibleNav(); track $index) {
+        @if (group.label) {
+          <div class="nav-group-label">{{ group.label }}</div>
+        }
+        <mat-nav-list>
+          @for (item of group.items; track item.route) {
+            <a
+              mat-list-item
+              [routerLink]="item.route"
+              routerLinkActive="active"
+              (click)="handset() && drawer.close()"
+            >
+              <mat-icon matListItemIcon>{{ item.icon }}</mat-icon>
+              <span matListItemTitle>{{ item.label }}</span>
+            </a>
+          }
+        </mat-nav-list>
+      }
+    </nav>
+  </mat-sidenav>
+
+  <mat-sidenav-content class="content-shell">
+    <mat-toolbar class="topbar">
+      @if (handset()) {
+        <button mat-icon-button aria-label="Toggle navigation" (click)="drawer.toggle()">
+          <mat-icon>menu</mat-icon>
+        </button>
+      }
+
+      <a class="brand" routerLink="/dashboard">
+        <mat-icon class="brand-mark">shield_lock</mat-icon>
+        <span class="brand-name">SSO Onboarding Portal</span>
+      </a>
+
+      <span class="flex-spacer"></span>
+
+      @if (auth.isSuperAdmin()) {
+        <app-impersonation-control />
+      }
+
+      <button
+        mat-icon-button
+        [attr.aria-label]="theme.mode() === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'"
+        matTooltip="Toggle theme"
+        (click)="theme.toggle()"
+      >
+        <mat-icon>{{ theme.mode() === 'dark' ? 'light_mode' : 'dark_mode' }}</mat-icon>
+      </button>
+
+      <app-notification-bell />
+
+      <button mat-button class="user-trigger" [matMenuTriggerFor]="userMenu">
+        <span class="avatar" [class.god]="auth.isSuperAdmin()">{{ initials() }}</span>
+        <span class="user-meta">
+          <span class="user-name">{{ auth.me()?.name }}</span>
+          <span class="user-role">{{ displayRoleLabel() }}</span>
+        </span>
+        <mat-icon iconPositionEnd>arrow_drop_down</mat-icon>
+      </button>
+
+      <mat-menu #userMenu="matMenu" xPosition="before">
+        <div class="user-card" (click)="$event.stopPropagation()">
+          <div class="user-card-name">{{ auth.me()?.name }}</div>
+          <div class="user-card-email text-muted">{{ auth.me()?.email }}</div>
+        </div>
+        <mat-divider />
+        <button mat-menu-item (click)="theme.toggle()">
+          <mat-icon>{{ theme.mode() === 'dark' ? 'light_mode' : 'dark_mode' }}</mat-icon>
+          {{ theme.mode() === 'dark' ? 'Light theme' : 'Dark theme' }}
+        </button>
+        <button mat-menu-item (click)="auth.logout()">
+          <mat-icon>logout</mat-icon>
+          Sign out
+        </button>
+      </mat-menu>
+    </mat-toolbar>
+
+    <app-impersonation-banner />
+
+    <main class="routed">
+      <router-outlet />
+    </main>
+  </mat-sidenav-content>
+</mat-sidenav-container>

@@ -1,0 +1,46 @@
+// Shared chip tones — consumed by ToneChipComponent (status + risk chips).
+// Include once per component stylesheet via `@use 'chip';` (src/styles is on the
+// SCSS include path) then `@include chip.tones;`.
+
+@mixin tones {
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: 2px var(--space-2);
+    border-radius: var(--radius-pill);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 18px;
+    white-space: nowrap;
+  }
+
+  .chip .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0.85;
+  }
+
+  .tone-neutral {
+    color: var(--status-neutral-fg);
+    background: var(--status-neutral-bg);
+  }
+  .tone-info {
+    color: var(--status-info-fg);
+    background: var(--status-info-bg);
+  }
+  .tone-warn {
+    color: var(--status-warn-fg);
+    background: var(--status-warn-bg);
+  }
+  .tone-success {
+    color: var(--status-success-fg);
+    background: var(--status-success-bg);
+  }
+  .tone-danger {
+    color: var(--status-danger-fg);
+    background: var(--status-danger-bg);
+  }
+}
