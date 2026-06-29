@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject, input, OnInit, signal } from '@angular/core';
+import { DatePipe } from '@angular/common';
 import { firstValueFrom } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -24,6 +25,7 @@ import { AddMemberDialogComponent } from './add-member-dialog.component';
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    DatePipe,
     MatButtonModule,
     MatIconModule,
     MatProgressSpinnerModule,
@@ -49,6 +51,19 @@ export class TeamDetailComponent implements OnInit {
 
   ngOnInit(): void {
     void this.load();
+  }
+
+  /** Resolve a member for display. v1 has no directory lookup, so we only know the
+   *  oid — except the current user, whom we can name from /me. */
+  protected isYou(member: TeamMember): boolean {
+    return this.auth.me()?.id === member.userId;
+  }
+
+  protected displayName(member: TeamMember): string {
+    if (this.isYou(member)) {
+      return 'You';
+    }
+    return member.name ?? member.userId;
   }
 
   private async load(): Promise<void> {

@@ -27,8 +27,21 @@
           @for (m of members(); track m.userId) {
             <div class="member-row">
               <div class="member-info">
-                <span class="avatar" aria-hidden="true">{{ '@' }}</span>
-                <span class="uid mono">{{ m.userId }}</span>
+                <span class="avatar" aria-hidden="true"><mat-icon>person</mat-icon></span>
+                <span class="member-text">
+                  <span class="member-name">
+                    {{ displayName(m) }}
+                    @if (isYou(m)) {
+                      <span class="you-tag">you</span>
+                    }
+                  </span>
+                  <span class="member-sub text-subtle">
+                    @if (displayName(m) !== m.userId) {
+                      <span class="mono">{{ m.userId }}</span> ·
+                    }
+                    Added {{ m.addedAt | date: 'mediumDate' }}
+                  </span>
+                </span>
               </div>
               @if (auth.can('team.manage')) {
                 <button mat-icon-button aria-label="Remove member"
