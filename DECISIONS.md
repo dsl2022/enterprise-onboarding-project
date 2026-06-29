@@ -591,3 +591,51 @@ existed. Contract untouched (the shapes + 501 were frozen in v1). **Tests** (Web
 endpoints → 501 authorized / 403 unpermissioned (AUDITOR+READ_ONLY) / 401 no-session, confirming the gate
 ordering and that the stub ignores the request body. **Forward:** the real assistant is its own phase/track
 with its own threat review — the design doc's autonomy ladder starts at this stub (Rung 0).
+
+## ADR-0024 — Phase 8: high availability (run ≥2 tasks) + the WIF issuer-key single-writer fix
+**Context:** make the app tier survive the loss of one task/AZ by running **≥2 Fargate tasks**. Most of HA
+was already designed in (guarded serializer, advisory-lock audit leader, SKIP-LOCKED notify, guarded
+provisioning claims + reaper, idempotency, Redis sessions, dependency-free `/healthz`), so Phase 8 is the
+operational glue + one latent multi-task hazard. Architect endorsed all four design decisions + three
+must-adds.
+**Decision (the four, as recommended):**
+- **Fixed `desired_count = 2`, autoscaling deferred.** Autoscaling ≠ HA; HA is "survive one task/AZ". Two
+  private subnets span two AZs → Fargate spreads one task per AZ. (service-module `desired_count` var, default 2.)
+- **Data-tier multi-AZ = a prod tfvars flip; dev stays single-AZ.** `var.multi_az` (root → data + cache)
+  already exists; `dev.tfvars` sets it `false` explicitly (RDS single-AZ + single-node Redis = a session
+  SPOF, not a workflow outage). Prod sets `multi_az = true` (RDS Multi-AZ + Redis replica + automatic
+  failover); the app already tolerates a failover blip (Flyway `connect-retries`, Hikari
+  `initialization-fail-timeout=-1`, Redis reconnect).
+- **Graceful shutdown:** `server.shutdown=graceful` + `spring.lifecycle.timeout-per-shutdown-phase=25s`
+  (drain in-flight requests + stop `@Scheduled` pollers cleanly on SIGTERM) + ALB target-group
+  `deregistration_delay=30`. A tick cut mid-flight stays safe (the reaper re-claims; relays idempotent).
+- **Single cohesive phase** (config + verify), not split.
+**Must-adds (folded in):**
+- **(1) WIF issuer-key single-writer — the one thing that can silently break provisioning.** A naive 2-task
+  cold-start would have each task generate its OWN RSA key, `putSecretValue` (last-write-wins) and publish
+  its own `jwks.json` (overwriting the single object) — so the loser's assertions carry a `kid` not in the
+  published JWKS and **fail at Entra**, breaking app→Graph provisioning intermittently. Doesn't bite *this*
+  scale-up (the dev key is already provisioned) but is a latent landmine (fresh-env cold-start + rotation,
+  issue #77). **Fix:** `IssuerKeyService` now holds a Postgres **advisory lock** (`ISSUER_KEY_LOCK`, the same
+  primitive as the audit relay) around the get-or-generate, so exactly one task generates+stores and the
+  others block then LOAD — all tasks converge on one `kid`. DB is available (the issuer publishes from an
+  `ApplicationRunner` after Flyway; deploy always runs `data` alongside `wif.enabled`). `wif` gains a
+  `javax.sql.DataSource` dep (ArchUnit still green; no cycle). Rotation should remain an out-of-band
+  single-writer op; the lock makes an accidental concurrent rotation safe too. Guarded by
+  `IssuerKeySingleWriterTest` (two instances + real Postgres → exactly one generate, same kid).
+- **(2) Graceful-shutdown hardening:** the ECS container **`stopTimeout=60`** is set ABOVE the 25s drain so
+  ECS doesn't SIGKILL mid-drain (default 30s is too close). Flagged for the verify pass: on Fargate SIGTERM
+  and ALB deregistration happen together, so a ~1–2s window of requests can 502; if the "no dropped
+  requests" check shows drops, the known fix is a SIGTERM pre-delay entrypoint trap (sleep a few seconds
+  before forwarding SIGTERM to the JVM so the LB deregisters first). Noted, not pre-built.
+- **(3) Concurrent-boot Flyway is safe (on record):** with 2 tasks starting together both run Flyway, but
+  Flyway takes a migration lock → exactly one applies, the others wait; the V8/V9 backlog fast-forwards are
+  idempotent `UPDATE`s regardless.
+**Also:** ECS deployment **circuit breaker** (enable+rollback) + `minimum_healthy_percent=100` /
+`maximum_percent=200` for safe rolling deploys; Hikari `maximum-pool-size=10` pinned (per-task connection
+ceiling explicit; 2×10 ≪ db.t4g.micro max_connections; scaling must re-check). **Contract untouched, no
+migration.** **Verification (post gated apply):** both tasks register healthy + round-robin; **both report
+the same issuer `kid` and the live JWKS contains exactly that key** (proves WIF multi-task-correctness);
+concurrent approvals → one winner; audit chain stays single-writer (`/audit/verify` valid) with relays on
+both tasks; kill a task mid-provision → reaper completes; kill the audit leader → another acquires the lock;
+rolling deploy drops no requests.

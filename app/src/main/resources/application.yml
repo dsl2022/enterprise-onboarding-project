@@ -1,10 +1,17 @@
 server:
   port: 8080
   forward-headers-strategy: framework   # behind ALB: trust X-Forwarded-* for correct redirect URIs
+  # Phase 8 (HA, ≥2 tasks): on SIGTERM (scale-in / rolling deploy) drain in-flight requests and stop the
+  # @Scheduled pollers cleanly instead of cutting them. Tomcat waits up to the timeout below; a tick that
+  # IS cut mid-flight stays safe (the reaper re-claims; the relays are idempotent). The ECS container
+  # stopTimeout (TF) is set ABOVE this window so ECS doesn't SIGKILL mid-drain.
+  shutdown: graceful
 
 spring:
   application:
     name: enterprise-onboarding-app
+  lifecycle:
+    timeout-per-shutdown-phase: 25s     # max graceful-drain window before the context force-stops
   mvc:
     problemdetails:
       enabled: true   # framework exceptions (401/404/422 …) render as RFC-7807 problem+json too

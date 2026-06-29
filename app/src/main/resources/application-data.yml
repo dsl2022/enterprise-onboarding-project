@@ -11,6 +11,12 @@ spring:
       # On the first Phase-2 roll RDS may still be initializing. Don't hard-fail the pool at startup;
       # Flyway's connect-retries (below) does the actual waiting before the first query.
       initialization-fail-timeout: -1
+      # Phase 8 (HA): pin the pool so the per-task connection ceiling is explicit, not an implicit default.
+      # Budget: tasks × max-pool (+ Flyway + the relay/issuer short-lived advisory-lock connection) must stay
+      # under RDS max_connections. At desired_count=2 that's ~2×10=20 on db.t4g.micro — comfortable. Scaling
+      # tasks (or autoscaling, later) MUST re-check max_connections against this number.
+      maximum-pool-size: 10
+      minimum-idle: 2
   jpa:
     # Flyway owns the schema; Hibernate only validates against it (no auto-DDL in any env).
     hibernate:
