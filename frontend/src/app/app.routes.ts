@@ -65,13 +65,7 @@ export const routes: Routes = [
     path: 'review-queue',
     canActivate: [authGuard, permissionGuard('review.read')],
     loadComponent: () =>
-      import('./features/placeholder/placeholder.component').then((m) => m.PlaceholderComponent),
-    data: {
-      title: 'Review queue',
-      subtitle: 'One queue for both onboarding and access requests awaiting a decision.',
-      status: 'live',
-      note: 'Approve/reject with separation-of-duties on the live /review-queue and decision endpoints.',
-    },
+      import('./features/review/review-queue.component').then((m) => m.ReviewQueueComponent),
   },
 
   {
