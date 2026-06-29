@@ -125,4 +125,16 @@ class ModuleBoundaryTest {
                     .should().onlyDependOnClassesThat()
                     .resideInAnyPackage("com.eop.notify..", "com.eop.authz..", "com.eop.platform..",
                             "java..", "jakarta..", "org.springframework..", "org.slf4j..", "com.fasterxml..");
+
+    /**
+     * {@code assistant} (Phase 7) is the contract stub — a controller that gates on {@code assistant.use} and
+     * returns 501. It depends ONLY on {@code authz} + {@code platform} (+ framework), never on a domain
+     * module. The real wizard (RAG/tools) is deferred; when it lands it gets its own, broader review.
+     */
+    @ArchTest
+    static final ArchRule assistant_module_boundary =
+            classes().that().resideInAPackage("com.eop.assistant..")
+                    .should().onlyDependOnClassesThat()
+                    .resideInAnyPackage("com.eop.assistant..", "com.eop.authz..", "com.eop.platform..",
+                            "java..", "jakarta..", "org.springframework..", "org.slf4j..", "com.fasterxml..");
 }

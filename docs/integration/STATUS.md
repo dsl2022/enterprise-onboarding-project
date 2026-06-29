@@ -10,7 +10,7 @@ Legend:
 - ⚪ **MOCK** — contract-stable but backend not built yet; mock from the OpenAPI.
 - 🛑 **501** — endpoint will exist but returns Not Implemented in v1.
 
-_Last updated: 2026-06-29 (Phase 6a audit merged + live-verified; Phase 6b in-app notifications built, PR pending)._
+_Last updated: 2026-06-29 (Phase 6 merged + live-verified; Phase 7 assistant stub built — 501 behind the auth gate)._
 
 ## Identity / session (Phase 3a) — 🟢 LIVE
 | Endpoint | Status | Notes |
@@ -84,10 +84,14 @@ resolution) and **email/SES** (in-app is the v1 channel; SES + oid→email is a 
 CR-20260629-1610). Eventually-consistent: an action shows in the feed sub-second after it commits, not within
 the same request.
 
-## Not built yet — mock from the contract
-| Area | Endpoint(s) | Status | Phase |
-|---|---|---|---|
-| Assistant (7) | `POST /assistant/chat` | 🛑 501 | 7 (stub only in v1) |
+## Assistant (Phase 7) — `/assistant*` — 🛑 501 (stub, built)
+| Endpoint | Status | Notes |
+|---|---|---|
+| `POST /assistant/chat` | 🛑 501 | **Built stub.** Gated: 401 (no session) → 403 if you lack `assistant.use` (AUDITOR/READ_ONLY) → **501** (RFC-7807) for authorized roles. The wizard/RAG/tools track is deferred (see `docs/assistant-feature-design-and-guardrails.md`). |
+| `POST /assistant/actions/{id}/approve` | 🛑 501 | Same gate → 501. The human-in-the-loop write-action approval lands with the real assistant. |
+
+FE: render an "assistant coming soon"/disabled state, gated on the `assistant.use` capability. The 501 is
+deliberate and contract-conformant — don't treat it as an outage.
 
 ## Suggested frontend build order
 Auth/identity → onboarding → access → teams → audit → notifications are all 🟢/🟡 (real or merging-live) —

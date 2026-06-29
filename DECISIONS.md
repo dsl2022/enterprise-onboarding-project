@@ -564,3 +564,30 @@ fast-forward** (`notified_at = now()` on existing rows so notify starts clean �
 **both directions** (a failing notify defers its own row without touching the audit chain; notify advances
 while audit hasn't processed the row). Minor/forward (noted, not built): two consumers mean the outbox grows
 until BOTH markers are set — an aged-out cleanup job is a Phase-10/prod concern.
+
+## ADR-0023 — Phase 7: assistant stub (501 behind the auth gate)
+**Context:** the frozen contract has `POST /assistant/chat` and `POST /assistant/actions/{id}/approve`, both
+documenting a **501**. The real wizard (RAG + tools + human-in-the-loop write-actions) is an explicitly
+deferred track — its whole-feature design + threat model + guardrails are written up in
+`docs/assistant-feature-design-and-guardrails.md` (research/opinion doc, PR #152). v1 ships only the stub.
+**Decision (the three stub decisions, as recommended in the Phase 7 note):**
+- **Gate auth BEFORE the 501.** Each endpoint: 401 if no session → `authz.require(ASSISTANT_USE)` → 403 for
+  a role lacking it (AUDITOR/READ_ONLY) → otherwise **501**. Rationale: keeps the server authoritative and
+  consistent with every other endpoint, makes the real build a drop-in (the gate is already correct), and an
+  un-permissioned role never even learns the feature is unimplemented. *Nuance accepted:* these two endpoints
+  don't *enumerate* 403 in their `responses` (only 200/422/501 and 202/501); a 403 from the cross-cutting
+  permission layer is standard and the FE already hides the assistant from un-permissioned roles, so this is a
+  conscious, low-risk choice over the stricter "501 for any authenticated caller."
+- **Stub ignores 422 + Idempotency-Key.** "Not implemented" precedes "is your body valid," and there's
+  nothing to replay — so the stub does not bind/validate the body or touch the idempotency store. The 422 +
+  idempotency wrap the endpoint when the real assistant lands.
+- **RFC-7807 problem+json 501 on BOTH** via a new reusable `platform.NotImplementedException` → one
+  `ApiExceptionHandler` arm (same machinery as our other RFC-7807 errors). `/chat`'s 501 is documented as
+  problem+json; `/actions/{id}/approve` documents a bare 501 — returning the same problem+json there is a
+  harmless superset and keeps one code path.
+**Module/contract:** new `assistant` module — `AssistantController` only, no service/persistence/migration/TF/
+flag (ArchUnit `assistant_module_boundary` → `authz`+`platform` only). `Permission.ASSISTANT_USE` already
+existed. Contract untouched (the shapes + 501 were frozen in v1). **Tests** (WebMvcTest, no DB): both
+endpoints → 501 authorized / 403 unpermissioned (AUDITOR+READ_ONLY) / 401 no-session, confirming the gate
+ordering and that the stub ignores the request body. **Forward:** the real assistant is its own phase/track
+with its own threat review — the design doc's autonomy ladder starts at this stub (Rung 0).
