@@ -1,0 +1,120 @@
+// =============================================================================
+// Design tokens — the single source of visual truth for the portal.
+//
+// Mirrors the existing SSO Onboarding Portal design system: IBM Plex typography,
+// a light/dark palette, and the status-chip semantics that both request types
+// (application onboarding + access request) share:
+//   draft = neutral · under-review/submitted = info · changes-requested = warning
+//   approved/provisioning = info · active/granted = success · rejected = danger
+//
+// Everything downstream (Material theme, components) consumes these CSS custom
+// properties so a single theme switch flips the whole app. Dark values live under
+// [data-theme="dark"] on <html>, toggled by ThemeService.
+// =============================================================================
+
+:root {
+  // ---- Typography ----------------------------------------------------------
+  --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', 'SFMono-Regular', ui-monospace, Menlo, monospace;
+
+  // ---- Spacing scale (4px base) -------------------------------------------
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+
+  --shell-topbar-height: 56px;
+  --shell-sidenav-width: 248px;
+
+  // ---- Light palette (default) --------------------------------------------
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-sunken: #eef0f3;
+  --surface-hover: #f0f2f5;
+  --border: #d8dce1;
+  --border-strong: #c2c8d0;
+
+  --text: #1a1f29;
+  --text-muted: #51596a;
+  --text-subtle: #757d8c;
+  --text-inverse: #ffffff;
+
+  --primary: #2f6df6;
+  --primary-hover: #2257d4;
+  --primary-contrast: #ffffff;
+  --focus-ring: #2f6df6;
+
+  // ---- Semantic status colors (fg = text/icon, bg = chip fill) ------------
+  // neutral
+  --status-neutral-fg: #51596a;
+  --status-neutral-bg: #e7eaee;
+  // info (in-flight: submitted / under-review / approved / provisioning)
+  --status-info-fg: #1f5fbf;
+  --status-info-bg: #dde9fb;
+  // warning (changes-requested)
+  --status-warn-fg: #8a5a00;
+  --status-warn-bg: #fbeed0;
+  // success (active / granted)
+  --status-success-fg: #1f7a44;
+  --status-success-bg: #d8f0e0;
+  // danger (rejected)
+  --status-danger-fg: #b3261e;
+  --status-danger-bg: #fadcd9;
+
+  // ---- Risk (catalog) — reuses the semantic ramp ---------------------------
+  --risk-low-fg: var(--status-success-fg);
+  --risk-low-bg: var(--status-success-bg);
+  --risk-medium-fg: var(--status-warn-fg);
+  --risk-medium-bg: var(--status-warn-bg);
+  --risk-high-fg: var(--status-danger-fg);
+  --risk-high-bg: var(--status-danger-bg);
+
+  // ---- Privileged / impersonation accent -----------------------------------
+  --god-mode-fg: #7a3df0;
+  --god-mode-bg: #ece2fc;
+  --god-mode-banner: #4a2a8f;
+}
+
+html[data-theme='dark'] {
+  --bg: #11141a;
+  --surface: #1a1f29;
+  --surface-raised: #222834;
+  --surface-sunken: #14181f;
+  --surface-hover: #252c39;
+  --border: #2e3643;
+  --border-strong: #3c4655;
+
+  --text: #e6e9ee;
+  --text-muted: #a4adbc;
+  --text-subtle: #7f8a9b;
+  --text-inverse: #11141a;
+
+  --primary: #5b8dff;
+  --primary-hover: #76a0ff;
+  --primary-contrast: #0c0f15;
+  --focus-ring: #5b8dff;
+
+  --status-neutral-fg: #b6bdc9;
+  --status-neutral-bg: #2c333f;
+  --status-info-fg: #9cc1ff;
+  --status-info-bg: #1c2c45;
+  --status-warn-fg: #f0c170;
+  --status-warn-bg: #3a2e16;
+  --status-success-fg: #7fd6a0;
+  --status-success-bg: #163026;
+  --status-danger-fg: #f0928c;
+  --status-danger-bg: #3a1d1c;
+
+  --god-mode-fg: #c4a8f7;
+  --god-mode-bg: #2a2140;
+  --god-mode-banner: #3a2a6b;
+}

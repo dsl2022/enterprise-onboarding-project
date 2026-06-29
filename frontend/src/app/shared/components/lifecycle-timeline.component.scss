@@ -1,0 +1,68 @@
+:host {
+  display: block;
+}
+
+.empty {
+  margin: 0;
+}
+
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.entry {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: var(--space-3);
+}
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.node {
+  width: 11px;
+  height: 11px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 2px solid var(--primary);
+}
+
+// Connecting line between nodes (not after the last row).
+.entry:not(:last-child) .rail::after {
+  content: '';
+  flex: 1;
+  width: 2px;
+  background: var(--border);
+  margin: 2px 0;
+}
+
+.body {
+  padding-bottom: var(--space-5);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.when {
+  font-size: 12px;
+}
+
+.meta {
+  margin-top: var(--space-1);
+  font-size: 13px;
+}
+
+.actor {
+  font-weight: 500;
+  color: var(--text);
+}

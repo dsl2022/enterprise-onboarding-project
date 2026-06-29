@@ -1,0 +1,138 @@
+import { HttpClient } from '@angular/common/http';
+import { computed, inject, Injectable, signal } from '@angular/core';
+import { DOCUMENT } from '@angular/common';
+import { Router } from '@angular/router';
+import { firstValueFrom } from 'rxjs';
+import { API_BASE, LOGIN_URL, LOGOUT_URL } from '../api/api.config';
+import { ImpersonationRequest, Me, Role } from '../api/models';
+import { ProblemError } from '../http/problem';
+import { environment } from '../../../environments/environment';
+import { Permission, permissionsFor } from './permissions';
+
+/**
+ * The identity hub. Calls `GET /me` once on startup, then exposes the principal
+ * and derived capabilities as signals the whole app reads from.
+ *
+ * Auth model recap (BFF): the browser holds no tokens — only the session cookie.
+ * A 401 on the `/me` probe means "not signed in"; `login()` is a full-page
+ * redirect to the BFF. While impersonating, `/me.roles` already reflects the
+ * REDUCED (impersonated) role, so `can()` gates to that view automatically, while
+ * `isSuperAdmin` stays true so the impersonation banner/control remain visible.
+ */
+/**
+ * The roles that actually govern the UI. While a Super Admin impersonates, this
+ * is ONLY the impersonated role — independent of whether the backend pre-reduces
+ * `roles[]` or returns the real held set (the contract wording is ambiguous;
+ * tracked as Q-003). Reducing off `impersonating` here removes that coupling, so
+ * gating is correct under either backend semantics. Identity/SoD/audit stay the
+ * real principal server-side; this only governs what UI we show.
+ */
+export function effectiveRoles(me: Me | null): Role[] {
+  if (!me) {
+    return [];
+  }
+  return me.impersonating ? [me.impersonating.role] : me.roles;
+}
+
+@Injectable({ providedIn: 'root' })
+export class AuthService {
+  private readonly http = inject(HttpClient);
+  private readonly doc = inject(DOCUMENT);
+  private readonly router = inject(Router);
+
+  private readonly _me = signal<Me | null>(null);
+  private readonly _loaded = signal(false);
+
+  /** Current principal, or null when not signed in. */
+  readonly me = this._me.asReadonly();
+  /** True once the first `/me` probe has resolved (success or 401). */
+  readonly loaded = this._loaded.asReadonly();
+
+  readonly isAuthenticated = computed(() => this._me() !== null);
+  readonly displayRole = computed<Role | null>(() => this._me()?.role ?? null);
+  readonly isSuperAdmin = computed(() => this._me()?.isSuperAdmin ?? false);
+  readonly impersonatedRole = computed<Role | null>(() => this._me()?.impersonating?.role ?? null);
+  readonly isImpersonating = computed(() => this.impersonatedRole() !== null);
+
+  /** Effective permission set (union of the effective roles; see effectiveRoles). */
+  readonly permissions = computed<Set<Permission>>(() => permissionsFor(effectiveRoles(this._me())));
+
+  private loadOnce: Promise<Me | null> | null = null;
+
+  /** Idempotent startup probe; safe to call from guards repeatedly. */
+  ensureLoaded(): Promise<Me | null> {
+    return (this.loadOnce ??= this.refresh());
+  }
+
+  /** Force a re-fetch of `/me` (after impersonation changes, etc.). */
+  async refresh(): Promise<Me | null> {
+    try {
+      const me = await firstValueFrom(this.http.get<Me>(`${API_BASE}/me`));
+      this._me.set(me);
+      return me;
+    } catch (err) {
+      if (err instanceof ProblemError && err.isUnauthorized) {
+        this._me.set(null);
+        return null;
+      }
+      throw err;
+    } finally {
+      this._loaded.set(true);
+    }
+  }
+
+  /** Capability check for UI gating (NOT authorization — see permissions.ts). */
+  can(permission: Permission): boolean {
+    return this.permissions().has(permission);
+  }
+  canAny(...perms: Permission[]): boolean {
+    return perms.some((p) => this.permissions().has(p));
+  }
+
+  // ---- Impersonation (SUPER_ADMIN only) ------------------------------------
+
+  async impersonate(role: Role): Promise<Me> {
+    const body: ImpersonationRequest = { role };
+    const me = await firstValueFrom(this.http.post<Me>(`${API_BASE}/impersonation`, body));
+    this._me.set(me);
+    return me;
+  }
+
+  async stopImpersonation(): Promise<void> {
+    await firstValueFrom(this.http.delete<void>(`${API_BASE}/impersonation`));
+    await this.refresh();
+  }
+
+  // ---- Session navigation --------------------------------------------------
+
+  /** Real mode: full-page redirect to the BFF → Entra. */
+  login(): void {
+    this.doc.defaultView!.location.href = LOGIN_URL;
+  }
+
+  logout(): void {
+    if (environment.useMockMe) {
+      // No backend in dev: clear the mock session and show the login screen.
+      const ls = this.doc.defaultView?.localStorage;
+      ls?.removeItem('eop.mockSignedIn');
+      ls?.removeItem('eop.mockImpersonate');
+      this._me.set(null);
+      this.loadOnce = null;
+      void this.router.navigateByUrl('/login');
+      return;
+    }
+    this.doc.defaultView!.location.href = LOGOUT_URL;
+  }
+
+  /** Dev-only sign-in used by the login screen when `useMockMe` is on. */
+  async mockSignIn(role?: Role): Promise<void> {
+    const ls = this.doc.defaultView?.localStorage;
+    ls?.setItem('eop.mockSignedIn', 'true');
+    if (role) {
+      ls?.setItem('eop.mockRole', role);
+    }
+    this.loadOnce = null;
+    await this.ensureLoaded();
+    void this.router.navigateByUrl('/dashboard');
+  }
+}

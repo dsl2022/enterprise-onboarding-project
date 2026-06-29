@@ -1,0 +1,7 @@
+@use 'chip';
+
+@include chip.tones;
+
+:host {
+  display: inline-flex;
+}

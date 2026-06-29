@@ -1,0 +1,23 @@
+{
+  "//": "Dev-only proxy. The prod model is same-origin behind the BFF (see docs/integration/QUESTIONS.md Q-001),",
+  "//2": "so in dev we forward /api and /auth to the Spring BFF on :8080 and pass the SESSION cookie through.",
+  "/api": {
+    "target": "http://localhost:8080",
+    "secure": false,
+    "changeOrigin": true,
+    "cookieDomainRewrite": "localhost",
+    "logLevel": "debug"
+  },
+  "/auth": {
+    "target": "http://localhost:8080",
+    "secure": false,
+    "changeOrigin": true,
+    "cookieDomainRewrite": "localhost",
+    "logLevel": "debug"
+  },
+  "/healthz": {
+    "target": "http://localhost:8080",
+    "secure": false,
+    "changeOrigin": true
+  }
+}

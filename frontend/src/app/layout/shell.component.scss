@@ -1,0 +1,139 @@
+:host {
+  display: block;
+  height: 100%;
+}
+
+.shell {
+  height: 100%;
+  background: var(--bg);
+}
+
+.sidenav {
+  width: var(--shell-sidenav-width);
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+  padding-top: var(--space-2);
+}
+
+.nav-group-label {
+  padding: var(--space-4) var(--space-5) var(--space-1);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+}
+
+.nav a.active {
+  --mat-list-list-item-label-text-color: var(--primary);
+  --mat-list-list-item-leading-icon-color: var(--primary);
+  background: var(--surface-sunken);
+  font-weight: 600;
+}
+
+.content-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  height: var(--shell-topbar-height);
+  padding: 0 var(--space-3);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text);
+  text-decoration: none;
+  margin-left: var(--space-1);
+}
+
+.brand:hover {
+  text-decoration: none;
+}
+
+.brand-mark {
+  color: var(--primary);
+}
+
+.brand-name {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.user-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 44px;
+}
+
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: var(--primary-contrast);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.avatar.god {
+  background: var(--god-mode-fg);
+}
+
+.user-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.15;
+}
+
+.user-name {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.user-role {
+  font-size: 11px;
+  color: var(--text-subtle);
+}
+
+.user-card {
+  padding: var(--space-3) var(--space-4);
+}
+
+.user-card-name {
+  font-weight: 600;
+}
+
+.user-card-email {
+  font-size: 12px;
+}
+
+.routed {
+  flex: 1 1 auto;
+  overflow: auto;
+}
+
+// Hide the dense user meta on narrow widths — keep just the avatar.
+@media (max-width: 599px) {
+  .user-meta,
+  .brand-name {
+    display: none;
+  }
+}

@@ -63,3 +63,34 @@ jobs:
         run: terraform init -backend=false -input=false
       - name: validate
         run: terraform validate -no-color
+
+  # The Angular client's gate. Runs on every PR (not path-filtered) on purpose:
+  # the contract-drift step regenerates the typed client from the frozen OpenAPI
+  # and fails on any diff, so a backend PR that edits docs/api/openapi-v1.yaml is
+  # caught here too — not just frontend-only PRs.
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20" # Angular 18 doesn't support Node 24; matches .nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install (clean, lockfile-pinned)
+        run: npm ci
+      - name: Contract drift gate (regenerate types from the frozen OpenAPI; fail on diff)
+        run: npm run check:contract
+      - name: Lint
+        run: npm run lint
+      - name: Build (production)
+        run: npm run build
+      - uses: browser-actions/setup-chrome@v1
+        id: setup-chrome
+      - name: Unit tests (headless)
+        run: npm run test:ci
+        env:
+          CHROME_BIN: ${{ steps.setup-chrome.outputs.chrome-path }}
