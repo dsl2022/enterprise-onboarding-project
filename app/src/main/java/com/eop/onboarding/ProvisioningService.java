@@ -64,8 +64,9 @@ public class ProvisioningService {
                 provisioned++;
             }
         }
-        // Pass 2: reap rows stuck in PROVISIONING whose lease/backoff elapsed.
-        for (RequestEntity r : engine.findStaleProvisioning(Instant.now(), PageRequest.of(0, BATCH))) {
+        // Pass 2: reap rows stuck in PROVISIONING whose lease/backoff elapsed (onboarding only — type-scoped).
+        for (RequestEntity r : engine.findStaleProvisioning(RequestType.ONBOARDING, Instant.now(),
+                PageRequest.of(0, BATCH))) {
             if (reprovisionStale(r)) {
                 provisioned++;
             }
