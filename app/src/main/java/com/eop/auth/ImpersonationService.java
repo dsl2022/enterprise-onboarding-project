@@ -1,6 +1,7 @@
 package com.eop.auth;
 
 import com.eop.authz.PortalRole;
+import com.eop.platform.PrincipalFactory;
 import jakarta.servlet.http.HttpSession;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
@@ -14,7 +15,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class ImpersonationService {
 
-    static final String SESSION_KEY = "eop.impersonatedRole";
+    static final String SESSION_KEY = PrincipalFactory.IMPERSONATION_SESSION_KEY;
 
     public Optional<PortalRole> current(HttpSession session) {
         Object value = session.getAttribute(SESSION_KEY);

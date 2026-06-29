@@ -2,6 +2,7 @@ package com.eop.platform;
 
 import com.eop.authz.CurrentPrincipal;
 import com.eop.authz.PortalRole;
+import jakarta.servlet.http.HttpSession;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
@@ -17,6 +18,15 @@ import org.springframework.util.StringUtils;
  */
 @Component
 public class PrincipalFactory {
+
+    /** Session attribute holding the active impersonation overlay (a {@link PortalRole}), or absent. */
+    public static final String IMPERSONATION_SESSION_KEY = "eop.impersonatedRole";
+
+    /** Build the principal, reading any impersonation overlay straight from the session. */
+    public CurrentPrincipal from(OidcUser oidcUser, HttpSession session) {
+        Object value = session == null ? null : session.getAttribute(IMPERSONATION_SESSION_KEY);
+        return from(oidcUser, value instanceof PortalRole role ? role : null);
+    }
 
     public CurrentPrincipal from(OidcUser oidcUser, PortalRole impersonatedRole) {
         String userId = StringUtils.hasText(oidcUser.getClaimAsString("oid"))

@@ -2,6 +2,8 @@ package com.eop.request;
 
 import java.time.Instant;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -34,4 +36,37 @@ public interface RequestRepository extends JpaRepository<RequestEntity, UUID> {
             @Param("reason") String reason,
             @Param("externalRef") String externalRef,
             @Param("now") Instant now);
+
+    /** Guarded payload edit: status is unchanged (must still be :status) and version is bumped. */
+    @Modifying(clearAutomatically = true)
+    @Query("""
+            UPDATE RequestEntity r
+               SET r.payload = :payload, r.version = r.version + 1, r.updatedAt = :now
+             WHERE r.id = :id AND r.status = :status AND r.version = :expectedVersion
+            """)
+    int guardedPayloadUpdate(@Param("id") UUID id,
+            @Param("status") RequestStatus status,
+            @Param("expectedVersion") int expectedVersion,
+            @Param("payload") String payload,
+            @Param("now") Instant now);
+
+    /** Role-scoped list: optional requester (ABAC own-scope) and optional status filters. */
+    @Query("""
+            SELECT r FROM RequestEntity r
+             WHERE r.type = :type
+               AND (:requester IS NULL OR r.requester = :requester)
+               AND (:status IS NULL OR r.status = :status)
+            """)
+    Page<RequestEntity> listByType(@Param("type") RequestType type,
+            @Param("requester") String requester,
+            @Param("status") RequestStatus status,
+            Pageable pageable);
+
+    /** Unified review queue: everything UNDER_REVIEW, optionally filtered by type. */
+    @Query("""
+            SELECT r FROM RequestEntity r
+             WHERE r.status = com.eop.request.RequestStatus.UNDER_REVIEW
+               AND (:type IS NULL OR r.type = :type)
+            """)
+    Page<RequestEntity> findUnderReview(@Param("type") RequestType type, Pageable pageable);
 }

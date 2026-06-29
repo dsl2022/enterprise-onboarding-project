@@ -64,7 +64,8 @@ public class ImpersonationController {
     }
 
     private void requireImpersonatePermission(OidcUser oidcUser) {
-        CurrentPrincipal real = principalFactory.from(oidcUser, null);
+        // No impersonation overlay (the real principal) — cast disambiguates the two from() overloads.
+        CurrentPrincipal real = principalFactory.from(oidcUser, (com.eop.authz.PortalRole) null);
         authz.require(real, Permission.IMPERSONATE);
     }
 }

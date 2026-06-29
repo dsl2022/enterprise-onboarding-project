@@ -45,4 +45,9 @@ final class RequestTransitions {
     static RequestStatus provisionedStatus(RequestType type) {
         return type == RequestType.ONBOARDING ? RequestStatus.ACTIVE : RequestStatus.GRANTED;
     }
+
+    /** A payload edit (PATCH) is legal only while the request is still being authored. */
+    static boolean canEditFrom(RequestStatus status) {
+        return status == RequestStatus.DRAFT || status == RequestStatus.CHANGES_REQUESTED;
+    }
 }

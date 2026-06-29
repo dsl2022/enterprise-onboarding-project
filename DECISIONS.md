@@ -201,3 +201,43 @@ full contract tests). Additive: V2 (platform-owned `messaging.outbox`) + V3 (req
 `request_events`); no infra/TF change → an `app-deploy` image roll. Module graph stays acyclic
 (`request → authz, platform`), ArchUnit-enforced. 28 tests green incl. concurrent-approver and
 impersonation-laundering against real Postgres.
+
+## ADR-0015 — Phase 4a: onboarding HTTP surface + idempotency + simulated provisioning
+**Context:** the first end-to-end vertical over the 3b engine — the frozen `/applications*` + `/review-queue`
+endpoints — and the cross-cutting HTTP infra they need (ETag, Idempotency-Key, read ABAC). Split 4a (this:
+contract-complete, no external dependency) from 4b (real Graph provisioning, consent-gated). Reviewed by
+consultant + architect; conditions folded in.
+**Decision:**
+- **Idempotency is claim-first** and covers **every** Idempotency-Key POST (create + submit + decision):
+  an atomic `INSERT (principal, endpoint, key)` is the lock (concurrent duplicates can't both run); the
+  winner stores its 2xx response (replay returns it), an error **releases** the claim (transient failures
+  stay retryable), a loser sees 409 (in progress) / the stored response / **422** (same key, different
+  body). The DB guard still gives exactly-once side effects; this gives replay-returns-original. 24h
+  window (stale keys reclaimed at claim time). Platform-owned `platform.idempotency_keys` (V4).
+- **PATCH = merge, not replace; `name`/`env` immutable** post-create. `RequestService.updatePayload` does a
+  guarded status-unchanged version bump with the same **authorize-before-revealing-state** order as a
+  transition (load → 403 → 412 → legal-status → guard). Read paths (`get`/`timeline`/`list`) authorize
+  (app.read + ownership/scope) **before** returning — the engine reads stay unguarded, ABAC at the
+  controller, with an ArchUnit guard that only `onboarding`/`review` (later `access`) may use the engine.
+- **Projection fidelity:** `ApplicationCreate.uris` → `Application.redirectUris`; `clientId` ← the
+  request's `external_ref`; total `RequestStatus`→`OnboardingStatus` (onboarding never reaches GRANTED).
+- **`/review-queue`** is type-agnostic and gated to `review.read` (reviewers only). ETag emitted quoted;
+  If-Match parsed (incl. `*`/weak) at the controller, engine takes the int.
+- **Simulated provisioning to ACTIVE:** a worker (`ProvisioningService.runOnce`) polls APPROVED →
+  `markProvisioning` claim (one winner) → `AppRegistrationProvisioner.provision` → `markProvisioned`. 4a
+  ships `SimulatedProvisioner` (default `eop.provisioning.simulate=true`, synthetic deterministic client
+  id) so the lifecycle completes with **no consent**; the scheduler is off by default
+  (`eop.provisioning.scheduler`), tests call `runOnce()` directly. 4b adds the real Graph implementation
+  + `tags`-based find-or-create (DB-`external_ref`-first, Graph tag `$filter` fallback) + the consent.
+- **Registry deferred:** with client-ID-only provisioning and `clientId` single-sourced on `external_ref`,
+  `registry` has no responsibility yet — it lands with secret minting + `secret.rotate` in the SP/secret
+  fast-follow (no duplicative table now).
+**Consequences / scope limits (write into the ticket/RUNBOOK):**
+- **An onboarded app is a registration + client ID, NOT a sign-in-capable app.** `Application.ReadWrite
+  .OwnedBy` creates the registration but **not a service principal**, so the app can't be used for sign-in
+  until an SP exists (needs the broader grant / a portal step) — a clean fast-follow / future CR. This
+  satisfies the contract DoD ("returns a client ID") but nobody should assume the app is live.
+- An ACTIVE app's metadata is immutable (PATCH is DRAFT/CHANGES_REQUESTED only); post-activation
+  management beyond the deferred `secret.rotate` is a future `registry` refinement. Acceptable for v1.
+- Additive (V4 migration + new modules); no infra/TF change in 4a → an `app-deploy` image roll. 40 tests
+  green incl. onboarding lifecycle, idempotency, read ABAC, and simulated provisioning to ACTIVE.

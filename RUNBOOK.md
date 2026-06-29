@@ -326,3 +326,28 @@ users can sign in. (Flow-2 WIF/Graph is app-only and unaffected throughout.)
 
 **Rollback if a login breaks:** set `entra_require_app_role_assignment = false`, re-apply — sign-in opens
 back up immediately while you fix the missing assignment.
+
+## 9. Phase 4 — onboarding + app-registration provisioning
+
+**4a (merged): no consent or infra step.** Pure app + DB migration (`V4` idempotency). The onboarding
+workflow runs end to end with `eop.provisioning.simulate=true` (default) — `POST /applications` →
+`/submit` → `/decision` (APPROVE) → the worker takes it to ACTIVE with a synthetic `sim-<id>` client id.
+The provisioning scheduler is **off by default** (`eop.provisioning.scheduler` unset).
+
+**4b (real Graph provisioning) — human GA consent required:**
+1. TF (`modules/entra`) declares `Application.ReadWrite.OwnedBy` on `eop-dev-app`; apply.
+2. **Grant admin consent (Global Admin)** — Terraform/CI can't:
+   ```bash
+   # Resolve the Graph app-role GUID live (never hardcode); then consent via Portal / local az / az rest.
+   az ad sp show --id 00000003-0000-0000-c000-000000000000 \
+     --query "appRoles[?value=='Application.ReadWrite.OwnedBy'].id" -o tsv
+   ```
+   The Cloud-Shell `az ad app permission admin-consent` MSI-audience bug applies (AS-BUILT §5) — use the
+   Portal "Grant admin consent" button, run `az` locally, or `az rest` against `appRoleAssignments`.
+3. Set `eop.provisioning.simulate=false` and `eop.provisioning.scheduler=true` (app env), roll the image.
+
+> **Scope limit — an onboarded app is NOT yet sign-in-capable.** `Application.ReadWrite.OwnedBy` creates
+> the app **registration** (and returns the client ID) but **not a service principal**, so the onboarded
+> app cannot be used for sign-in in the tenant until an SP is created (needs `Application.ReadWrite.All`
+> or a portal step). This satisfies the contract DoD ("returns a client ID"); SP creation + secret
+> minting + `secret.rotate` (and the `registry` module) are a deliberate fast-follow.
