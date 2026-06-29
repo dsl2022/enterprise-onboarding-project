@@ -9,9 +9,11 @@ import { NotificationsService } from '../core/services/notifications.service';
 
 /**
  * Top-bar notification center: a bell with an unread-count badge that opens a
- * panel of notifications (both request types), newest first, each click-through
- * to its resource. Mark-as-read (single) + mark-all-read. Backed by a mock feed
- * until Phase 6 (see NotificationsService).
+ * panel of notifications, newest first, with a per-type icon. Clicking an item
+ * marks it read; "Mark all read" clears the badge. Re-fetches each time the panel
+ * opens so a just-taken action shows up (the feed is eventually-consistent, written
+ * sub-second by the relay). Backed by the live /notifications feed in prod and a
+ * dev-only seed in dev (see NotificationsService).
  */
 @Component({
   selector: 'app-notification-bell',
@@ -29,6 +31,7 @@ import { NotificationsService } from '../core/services/notifications.service';
     <button
       mat-icon-button
       [matMenuTriggerFor]="menu"
+      (menuOpened)="notifications.load()"
       [attr.aria-label]="
         notifications.unreadCount() > 0
           ? notifications.unreadCount() + ' unread notifications'
@@ -63,6 +66,7 @@ import { NotificationsService } from '../core/services/notifications.service';
         @for (n of notifications.items(); track n.id) {
           <button mat-menu-item class="bell-item" (click)="notifications.markRead(n.id)">
             <span class="unread-dot" [class.is-read]="n.read" aria-hidden="true"></span>
+            <mat-icon class="bell-icon text-subtle">{{ icon(n.type) }}</mat-icon>
             <span class="bell-text">
               <span class="bell-title" [class.is-read]="n.read">{{ n.title }}</span>
               <span class="bell-body text-muted">{{ n.body }}</span>
@@ -111,6 +115,13 @@ import { NotificationsService } from '../core/services/notifications.service';
       .unread-dot.is-read {
         background: transparent;
       }
+      .bell-icon {
+        font-size: 18px;
+        width: 18px;
+        height: 18px;
+        margin-top: 1px;
+        flex: 0 0 auto;
+      }
       .bell-text {
         display: flex;
         flex-direction: column;
@@ -141,4 +152,19 @@ export class NotificationBellComponent implements OnInit {
   ngOnInit(): void {
     this.notifications.load();
   }
+
+  /** Maps a backend event `type` to a Material icon (falls back to the bell). */
+  protected icon(type: string): string {
+    return TYPE_ICONS[type] ?? 'notifications';
+  }
 }
+
+const TYPE_ICONS: Record<string, string> = {
+  'request.approved': 'check_circle',
+  'request.rejected': 'cancel',
+  'request.changes_requested': 'rate_review',
+  'request.active': 'rocket_launch',
+  'request.granted': 'vpn_key',
+  'team.member.added': 'group_add',
+  'team.member.removed': 'group_remove',
+};
