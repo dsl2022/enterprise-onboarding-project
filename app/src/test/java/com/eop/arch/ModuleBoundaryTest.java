@@ -111,4 +111,18 @@ class ModuleBoundaryTest {
                     .should().onlyDependOnClassesThat()
                     .resideInAnyPackage("com.eop.audit..", "com.eop.authz..", "com.eop.platform..",
                             "java..", "jakarta..", "org.springframework..", "org.slf4j..", "com.fasterxml..");
+
+    /**
+     * {@code notify} (Phase 6b) is the SECOND outbox-projection module — the in-app feed. Like {@code audit}
+     * it depends ONLY on {@code authz} + {@code platform} (+ JDK/framework), never on the domain modules. It
+     * is a SEPARATE consumer (its own {@code NotifyRelay}, not a handler on the audit relay) so notify can
+     * never stall the audit chain. v1 carries no {@code directory} dependency — the deferred reviewer
+     * fan-out + oid→email resolution would add it when that Graph capability lands.
+     */
+    @ArchTest
+    static final ArchRule notify_module_boundary =
+            classes().that().resideInAPackage("com.eop.notify..")
+                    .should().onlyDependOnClassesThat()
+                    .resideInAnyPackage("com.eop.notify..", "com.eop.authz..", "com.eop.platform..",
+                            "java..", "jakarta..", "org.springframework..", "org.slf4j..", "com.fasterxml..");
 }

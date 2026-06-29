@@ -516,3 +516,51 @@ depends on audit). `EOP_RELAY_SCHEDULER=true` always-on in deploy (no gate). Con
 `/audit*` shapes were frozen in v1). Minor/deferred: `resource_type` alone can't tell onboarding from access
 (both are the `request` aggregate) — `detail.type` (RequestType) distinguishes them; `/audit/verify` is O(n)
 from genesis (fine for v1/dev; checkpointing deferred to prod scale).
+
+## ADR-0022 — Phase 6b: in-app notifications via a second, decoupled outbox consumer
+**Context:** the external half of Phase 6 — `GET /notifications`, `POST /notifications/{id}/read`,
+`POST /notifications/read-all`, fed from the same `messaging.outbox` as audit. Architect review green-lit
+the design note with decisions 1–5 as recommended and catches A–D folded in.
+**Decision:**
+- **Separate consumer, not a handler (decision 1 — the load-bearing one).** Notifications are derived by a
+  standalone `notify.NotifyRelay`, NOT by adding a handler to the 6a single-leader audit relay. If notify
+  rode the audit relay, an SES/notify failure (which defers-and-stops the tick) would freeze the
+  tamper-evident audit chain. So notify is fully decoupled: its own poller, its own outbox markers
+  (`notified_at`/`notify_attempts`/`notify_next_attempt_at`, distinct from audit's `published_at`/`attempts`),
+  its own failure handling. A row is fully consumed only when BOTH `published_at` and `notified_at` are set.
+- **`FOR UPDATE SKIP LOCKED` fan-out.** Notifications have no chain, so order is irrelevant — N tasks claim
+  disjoint rows in parallel (no advisory lock, no single leader). This is the SKIP-LOCKED case 6a reserved.
+- **Per-row, single-transaction claim→project→mark (catch C).** Each row is claimed, projected, and
+  `notified_at`-marked in ONE tx; SKIP LOCKED makes that safe and removes the redispatch window.
+  `UNIQUE(source_event_id, recipient)` stays as defense for a crash before commit. (Audit needed a split-tx
+  dance ONLY because of its chain; notify doesn't.) A poison row is deferred (backoff) and the consumer
+  CONTINUES — order-independence means one bad row never blocks others (unlike audit, which must stop).
+- **`createdAt` = event `occurred_at` (catch A), not insert time.** With lagging SKIP-LOCKED consumers,
+  ordering the feed by insert time would dump a clump of "now"-stamped rows at the top after a stall — stale
+  events masquerading as new. occurred_at keeps the feed causally stable regardless of consumer timing.
+- **Feed + read-state scoped to the REAL principal (catch B).** `realUserId`, never the effective identity —
+  a Super Admin impersonating sees/marks THEIR own feed (same ABAC-on-the-real-principal rule as audit/SoD).
+- **Self-suppression (catch D).** `recipient == actor` → no notification (don't tell someone about their own
+  action, e.g. a Super Admin who adds themselves to a team).
+- **v1 recipient model (decision 4 + architect post-approval note).** Notify the individual already in the
+  event — requester on **terminal/decision** outcomes `request.{approved,rejected,changes_requested,active,
+  granted}`, affected member on `team.member.{added,removed}`. **`request.provisioning_failed` is
+  deliberately NOT notifiable** — provisioning auto-retries (no terminal FAILED state in v1), so notifying on
+  it would be repeat noise + a confusing problem-then-success sequence; a real dead-letter event is the right
+  trigger if ops wants failure alerts. No directory enumeration. The **reviewer-queue fan-out** (role→all
+  reviewers) is **deferred** — it needs the same Graph directory capability as oid→email; light them up
+  together (CR-20260629-1610).
+- **In-app is the v1 channel; SES deferred (decisions 2+3).** The in-app feed (guaranteed, no external dep,
+  no consent) ships now, always-on (`EOP_NOTIFY_SCHEDULER=true`). **SES email + oid→email resolution + the
+  retry/dead-letter/TF SES module are deferred** to a tracked follow-up (CR-20260629-1610) — they add an
+  external dependency, a Graph consent (`User.Read.All`), and a human SES-identity-verification step, none of
+  which should gate the in-app feature. `read`/`read-all` need no Idempotency-Key (naturally idempotent);
+  mark-read of a non-owned notification → 404 (no existence leak).
+**Module/contract:** new `notify` module (ArchUnit `notify_module_boundary` → `authz`+`platform` only; NOT
+`directory` in v1 — that arrives with the deferred Graph work). Contract untouched (the `/notifications*`
+shapes were frozen in v1). V9 = `notify.notifications` + the outbox notify-markers + the **backlog
+fast-forward** (`notified_at = now()` on existing rows so notify starts clean — no retroactive burst for the
+4b/5b/5c runs or the 6a live-verify seq-1 row). **Tests:** the decoupling proof is first-class and asserted
+**both directions** (a failing notify defers its own row without touching the audit chain; notify advances
+while audit hasn't processed the row). Minor/forward (noted, not built): two consumers mean the outbox grows
+until BOTH markers are set — an aged-out cleanup job is a Phase-10/prod concern.

@@ -71,7 +71,16 @@ stored in **Redis**, carried by a **session cookie**.
    `effectiveRole` carries the impersonated role). **`seq` is monotonic but may have gaps** — render it as an
    id/ordering key, never as a count or "N events total". `GET /audit/verify` is a tamper-check, not a
    data-freshness check.
-9. **Teams: `team.read` is broad, `team.manage` is owner-only.** A user sees a team if they created it OR
+9. **Notifications (`/notifications`) are a derived, own-feed-only stream.** Like audit, they're eventually
+   consistent (a decision shows up sub-second after it commits, not in the same response) — don't poll them to
+   confirm an action. The feed is **always the caller's own** (scoped to the real principal, so a Super Admin
+   impersonating sees *their* feed, not the impersonated user's). `POST /{id}/read` on someone else's
+   notification → **404** (not 403 — existence isn't leaked). `unreadCount` is for the badge. v1 notifies the
+   **individual in the event** (requester on a decision/provisioning outcome; affected member on a team
+   add/remove) and **suppresses self-actions** — so a reviewer who approves their *own* queue item, or a user
+   who adds *themselves* to a team, gets nothing. **No email in v1** (in-app only; SES is deferred). There is
+   **no create endpoint** — notifications are emitted by the backend.
+10. **Teams: `team.read` is broad, `team.manage` is owner-only.** A user sees a team if they created it OR
    are an active member (`GET /teams` is scoped that way; members can read the roster). But **only the
    creator** (or ADMIN/SUPER_ADMIN) can add/remove members — a non-creator member gets **403** on
    `POST/DELETE …/members`. Gate the "manage members" UI on being the team's creator, not just a member.
