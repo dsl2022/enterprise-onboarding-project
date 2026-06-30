@@ -34,3 +34,4 @@ gates, where "why did we change this field?" must be answerable months later.
 | [CR-20260629-0723](CR-20260629-0723-v1-teams-scope-abac-delegation.md) | 2026-06-29 07:23 EDT | Issue #95 (5c) | teams = portal-local for v1 (defer group-backing); ABAC team-delegation clarification | Applied (5c PR) |
 | [CR-20260629-1510](CR-20260629-1510-v1-deflake-two-approvers-test.md) | 2026-06-29 15:10 EDT | PR (6a) | de-flake two-approvers concurrency test (retry transient) | Applied (6a branch) |
 | [CR-20260629-1610](CR-20260629-1610-v1-notify-ses-email-and-directory-fanout.md) | 2026-06-29 16:10 EDT | Phase 6b note | SES email + oid→email + reviewer fan-out (deferred together) | Open (candidate) |
+| [CR-20260630-0007](CR-20260630-0007-v1-assistant-rung1-contract-tools-audit.md) | 2026-06-30 00:07 EDT | ADR-0023 (assistant Rung 1) | reconcile frozen chat contract + re-derive tools per request-type + split audit routing | Accepted (1–7 folded; R1 provenance open) |
