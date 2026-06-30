@@ -27,7 +27,7 @@ export const NAV: NavGroup[] = [
   {
     items: [
       { label: 'Applications', icon: 'apps', route: '/applications', permission: 'app.read' },
-      { label: 'Assistant', icon: 'smart_toy', route: '/assistant', permission: 'assistant.use' },
+      { label: 'AI Assistant', icon: 'smart_toy', route: '/assistant', permission: 'assistant.use' },
     ],
   },
   {

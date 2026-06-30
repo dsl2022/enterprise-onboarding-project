@@ -155,10 +155,11 @@ A tamper-evident record of every action. Under **Audit** (SSO_OPS / ADMIN / AUDI
   separately. `seq` is an ordering key (may have gaps), never a count. The log is
   eventually-consistent — a just-taken action appears within a moment.
 
-### Assistant (preview)
-An **advisory** onboarding helper under **Assistant** (visible to roles with `assistant.use`). It's a
-chat surface meant to help you draft the wizard forms — descriptions, redirect-URI checks, least-privilege
-scope suggestions, group-ownership checks. Two things to know:
+### AI Assistant (preview)
+An **advisory** onboarding helper under **AI Assistant** (visible to roles with `assistant.use`), also
+reachable from the **floating chat button** in the lower-right of every page. It's a chat surface meant
+to help you draft the wizard forms — descriptions, redirect-URI checks, least-privilege scope
+suggestions, group-ownership checks. Two things to know:
 - It is **advisory, never authoritative** — it can only *suggest* inputs; it can't submit, approve, or
   provision anything. The governed request engine (RBAC/ABAC/SoD) stays the only thing that changes state.
 - In v1 the backend is a **stub**, so the screen is an honest **preview**: send a message and it tells you
