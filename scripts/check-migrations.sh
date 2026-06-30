@@ -12,6 +12,11 @@
 #
 # Usage: scripts/check-migrations.sh [BASE_REF]
 #   BASE_REF defaults to origin/main. Compares <BASE_REF>...HEAD (changes since the merge-base).
+#
+# Known limitation (acceptable for a SOFT guard): scanning is line-based, so DDL split across multiple lines
+# (e.g. `ALTER ... \n ... TYPE`) and `/* ... */` block comments are not understood — only `--` line comments
+# are stripped. A miss here just falls through to human review; it never produces a false BLOCK (exit is
+# always 0). Most Flyway migrations here are single-statement-per-line with `--` comments.
 set -euo pipefail
 
 BASE_REF="${1:-origin/main}"
@@ -81,8 +86,9 @@ scan_unless() { # file label pos-pattern neg-pattern
 for f in "${FILES[@]}"; do
   [[ -f "$f" ]] || continue
   # Destructive / tightening DDL — must wait for the contract (N+1) release once the old image is gone.
-  scan "$f" "DROP of a table/column/constraint — destructive; defer to the contract (N+1) release (ADR-0025)" \
-    'drop[[:space:]]+(table|column|constraint)'
+  # (DROP NOT NULL / DROP DEFAULT are relaxing, hence backward-compatible, and intentionally NOT listed.)
+  scan "$f" "DROP of a schema object — destructive; defer to the contract (N+1) release (ADR-0025)" \
+    'drop[[:space:]]+(table|column|constraint|index|schema|type|view|sequence|materialized)'
   scan "$f" "Column RENAME — breaks the old image still reading the old name; expand+backfill instead (ADR-0025)" \
     'rename[[:space:]]+(column|to)'
   scan "$f" "ALTER COLUMN ... TYPE — table rewrite + breaks old readers; add a new column instead (ADR-0025)" \
