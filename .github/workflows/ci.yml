@@ -94,3 +94,21 @@ jobs:
         run: npm run test:ci
         env:
           CHROME_BIN: ${{ steps.setup-chrome.outputs.chrome-path }}
+
+  # Expand/contract migration guard (DECISIONS ADR-0025). Every deploy runs old+new app images against the
+  # same DB (Phase 8 rolling: min-100/max-200; Phase 9 blue/green: the bake), so destructive or lock-heavy
+  # DDL can break or block the still-serving old version. This SOFT guard scans the migrations a PR
+  # adds/changes and emits warnings pointing at ADR-0025 — it never fails the build (destructive DDL is
+  # legitimate in a contract release; the guard makes that an explicit, reviewed choice). PR-only: it needs a
+  # base ref to diff against.
+  migrations:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Migration guard (ADR-0025 expand/contract)
+        run: |
+          git fetch --quiet origin "${{ github.base_ref }}"
+          bash scripts/check-migrations.sh "origin/${{ github.base_ref }}"

@@ -639,3 +639,51 @@ the same issuer `kid` and the live JWKS contains exactly that key** (proves WIF 
 concurrent approvals → one winner; audit chain stays single-writer (`/audit/verify` valid) with relays on
 both tasks; kill a task mid-provision → reaper completes; kill the audit leader → another acquires the lock;
 rolling deploy drops no requests.
+
+## ADR-0025 — Online, backward-compatible (expand/contract) migrations as a standing rule
+**Status:** Accepted. Adopted independent of Phase 9 — it is already in force today (see Context).
+
+**Context:** Every deploy runs the OLD and NEW app image concurrently against the SAME RDS/Redis for a
+window. This is NOT introduced by blue/green — Phase 8's **rolling** deploy already does it: with
+`deployment_minimum_healthy_percent=100` / `maximum_percent=200`, ECS starts the new tasks (which have run
+their Flyway migrations) before draining the old ones, so the old image serves against the already-migrated
+schema. Blue/green (Phase 9, ADR-0024-adjacent, issue #78) only makes that window **longer** (the bake) and
+more **explicit** — it does not create the constraint. Consequently the "blue/green gives a no-mixed-version
+window" headline does NOT hold for this system (shared data tier); the real wins of blue/green are
+pre-traffic smoke validation + instant shift-rollback, not schema isolation.
+
+**Decision:** Database migrations are a **standing v1+ rule**, enforced by review and a soft CI guard:
+1. **Backward-compatible in shape (expand first).** A migration must not break the *previous* app version
+   that is still serving during the deploy: additive columns/tables/indexes only; **no** destructive or
+   tightening DDL (`DROP COLUMN/TABLE`, `RENAME`, `ALTER COLUMN ... TYPE`, `SET NOT NULL` without a
+   backfilled default) in the **same** release as the code that depends on the new shape.
+2. **Two-release expand→contract sequence.** Introduce the new shape additively in release **N**; remove or
+   tighten the old shape in release **N+1**, once no task running the old image remains. Destructive DDL is
+   *allowed* — only deferred to the contract release.
+3. **Online / lock-safe DDL, not just additive in shape.** Because green runs Flyway while blue serves, a
+   migration that is shape-compatible but takes a heavy lock or rewrites a table (a non-`CONCURRENTLY` index
+   on a large table, a volatile-default column add) will **block the old version** for the duration. DDL
+   must be online/lock-safe on production-sized data. (A non-issue on tiny dev data; real in prod — the rule
+   is written for prod.)
+
+**WIF analogue (issuer-key rotation is deploy-free).** The same hazard exists for the WIF issuer signing key:
+during a deploy, if the new image **rotates/introduces a new key** it publishes a new `jwks.json`, and the
+old image — still signing assertions with the old `kid` — breaks (its `kid` is no longer in the JWKS). The
+ADR-0024 advisory-lock writer (`ISSUER_KEY_LOCK`) makes *accidental concurrency* safe (one writer) but does
+NOT make a *rotation-during-deploy* safe. **Rule:** issuer-key rotation is a standalone, deploy-free
+operation — never coincident with a deploy. **Smoke-gate refinement (for when blue/green ships):** the
+pre-shift gate must assert green **adopts the `kid` the prior version was already serving** (i.e. no new key
+introduced during the deploy), NOT merely "green's `kid` == live `kid`" — the latter passes even when green
+just published a brand-new key that has already broken blue. The gate must also include a **blue-health
+check after green's Flyway runs** (prove the still-serving old version works against the now-migrated schema
+*before* any traffic shift).
+
+**Enforcement:** `scripts/check-migrations.sh` (wired as the `migrations` job in `ci.yml`) scans the
+migration files a PR adds/changes for destructive or lock-heavy DDL and emits GitHub **warnings** (a
+reviewer checklist), pointing the author at this ADR. It is a **soft warn, not a hard block** — destructive
+DDL is legitimate in a contract (N+1) release; the guard exists to make the expand/contract decision a
+*conscious, reviewed* one, not to forbid it.
+
+**Consequences:** The discipline is owed now (Phase 8), not deferred to Phase 9; it is therefore decoupled
+from whether the blue/green machinery is ever built. Reviewers and the soft guard carry it. The cost is a
+two-release dance for destructive schema changes (acceptable; standard for zero-downtime systems).
