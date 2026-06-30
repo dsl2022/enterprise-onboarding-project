@@ -18,6 +18,7 @@ import { NAV, NavGroup } from './nav';
 import { NotificationBellComponent } from './notification-bell.component';
 import { ImpersonationControlComponent } from './impersonation-control.component';
 import { ImpersonationBannerComponent } from './impersonation-banner.component';
+import { AssistantFabComponent } from './assistant-fab.component';
 
 /**
  * The application shell: top bar (brand, notification bell, impersonation control
@@ -44,6 +45,7 @@ import { ImpersonationBannerComponent } from './impersonation-banner.component';
     NotificationBellComponent,
     ImpersonationControlComponent,
     ImpersonationBannerComponent,
+    AssistantFabComponent,
   ],
   templateUrl: './shell.component.html',
   styleUrl: './shell.component.scss',
