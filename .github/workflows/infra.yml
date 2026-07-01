@@ -34,8 +34,12 @@ env:
 
 jobs:
   # ---- PLAN on pull requests (read-only role), posted as a PR comment ----
+  # Skipped for Dependabot PRs: those runs use the restricted *Dependabot* secret store (not the repo Actions
+  # secrets), so the AWS/Azure OIDC role ARNs are empty and `configure-aws-credentials` can't assume a role.
+  # Dependabot only bumps action pins in workflow YAML — never Terraform — so there is nothing to plan anyway.
+  # (`terraform validate` in ci.yml still covers TF validity on every PR, including Dependabot's.)
   plan:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     concurrency:
       group: terraform-plan-${{ github.ref }}
