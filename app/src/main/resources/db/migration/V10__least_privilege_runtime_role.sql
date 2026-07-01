@@ -32,7 +32,11 @@ BEGIN
 END $$;
 
 -- ---- Read the world the app touches (all app schemas, incl. audit for GET /audit + the relay's tail read).
-GRANT USAGE ON SCHEMA public, messaging, request, platform, access, teams, notify, audit TO eop_app;
+-- The three RESERVED empty schemas (directory, onboarding, registry — placeholders from V1; `directory` is
+-- where the com.eop.directory Graph work would land a table) are included so the default-privileges below
+-- actually cover them: without this, a future table there would get no grant → "works as master, breaks as
+-- eop_app" after Stage 2 — the exact failure this migration exists to prevent.
+GRANT USAGE ON SCHEMA public, messaging, request, platform, access, teams, notify, directory, onboarding, registry, audit TO eop_app;
 GRANT SELECT ON ALL TABLES IN SCHEMA messaging, request, platform, access, teams, notify, audit TO eop_app;
 
 -- ---- Write the MUTABLE schemas (everything except audit).
@@ -50,9 +54,11 @@ REVOKE UPDATE, DELETE, TRUNCATE ON audit.audit_events FROM eop_app;
 -- eop_app (forgetting would break the app at runtime on the new table). Defaults apply to objects created by
 -- the CURRENT role (master = the Flyway migrator), which is exactly who future migrations run as. Ties to the
 -- ADR-0025 expand/contract discipline: adding a table is expand-safe AND privilege-safe by default.
-ALTER DEFAULT PRIVILEGES IN SCHEMA messaging, request, platform, access, teams, notify
+-- Includes the reserved schemas (directory, onboarding, registry) so the "privilege-safe by default" claim
+-- holds repo-wide — a future table in any app schema (mutable OR reserved) is auto-granted to eop_app.
+ALTER DEFAULT PRIVILEGES IN SCHEMA messaging, request, platform, access, teams, notify, directory, onboarding, registry
   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO eop_app;
-ALTER DEFAULT PRIVILEGES IN SCHEMA messaging, request, platform, access, teams, notify
+ALTER DEFAULT PRIVILEGES IN SCHEMA messaging, request, platform, access, teams, notify, directory, onboarding, registry
   GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO eop_app;
 ALTER DEFAULT PRIVILEGES IN SCHEMA audit
   GRANT SELECT, INSERT ON TABLES TO eop_app;

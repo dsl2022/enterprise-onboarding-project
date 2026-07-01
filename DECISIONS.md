@@ -707,7 +707,11 @@ in V8.)
   `INSERT/UPDATE/DELETE` on the **mutable** schemas (`messaging, request, platform, access, teams, notify`);
   **`INSERT`-only on `audit.audit_events`** with an explicit `REVOKE UPDATE, DELETE, TRUNCATE` (defense in
   depth over by-omission). `ALTER DEFAULT PRIVILEGES` sets the same defaults for **future** tables/sequences
-  so a new migration can't accidentally lock the app out of its own new table (ties to ADR-0025).
+  so a new migration can't accidentally lock the app out of its own new table (ties to ADR-0025). Coverage is
+  **repo-wide**: the USAGE grant + both default-privilege blocks include the reserved empty schemas
+  (`directory`, `onboarding`, `registry`) too — so the "privilege-safe by default" claim holds even for the
+  schema (`directory`, the Graph module) most likely to gain a table next; otherwise that table would work as
+  master but break as `eop_app` after Stage 2.
 - **Auth = RDS IAM database auth** (chosen over a second stored password): `eop_app` is `LOGIN` +
   `GRANT rds_iam` (guarded `IF EXISTS` so V10 also runs on vanilla Postgres in CI/Testcontainers); the ECS
   **task role** gets `rds-db:connect` scoped to `dbuid:<DbiResourceId>/eop_app`; the instance gets
