@@ -19,6 +19,29 @@ resource "aws_secretsmanager_secret_version" "flow1" {
   secret_string = var.entra_client_secret
 }
 
+# Phase 10-1 Stage 2: the eop_app runtime-role password. IAM database auth was preferred (ADR-0026) but its
+# token login is blocked in this environment (see #175), so eop_app authenticates with a managed password —
+# same pattern as the RDS master user, one more CMK-encrypted secret. Flyway (master) sets the role's password
+# from this secret via V11's ${eop_app_password} placeholder; the app datasource reads the same secret. The
+# password never enters Terraform state legibly (random_password.result is sensitive; the secret is CMK-encrypted).
+# The IAM-auth infra (rds_iam grant, instance IAM flag, task rds-db:connect) is left in place — harmless when
+# unused, and lets us retry IAM later with no TF change.
+resource "random_password" "eop_app" {
+  length  = 32
+  special = false # alphanumeric — safe in the ALTER ROLE SQL string and a JDBC URL, no escaping surprises
+}
+
+resource "aws_secretsmanager_secret" "eop_app" {
+  name                    = "${var.name_prefix}/eop-app-db"
+  kms_key_id              = var.kms_key_arn
+  recovery_window_in_days = 0
+}
+
+resource "aws_secretsmanager_secret_version" "eop_app" {
+  secret_id     = aws_secretsmanager_secret.eop_app.id
+  secret_string = random_password.eop_app.result
+}
+
 # ---- IAM ----
 data "aws_iam_policy_document" "assume" {
   statement {
@@ -46,7 +69,7 @@ data "aws_iam_policy_document" "exec_secrets" {
     # Flow 1 client secret + the RDS-managed DB master secret. Both are CMK-encrypted, so the
     # kms:Decrypt grant below (project CMK) covers injection of both at task start.
     actions   = ["secretsmanager:GetSecretValue"]
-    resources = [aws_secretsmanager_secret.flow1.arn, var.db_master_secret_arn]
+    resources = [aws_secretsmanager_secret.flow1.arn, var.db_master_secret_arn, aws_secretsmanager_secret.eop_app.arn]
   }
   statement {
     actions   = ["kms:Decrypt"]
@@ -161,6 +184,9 @@ resource "aws_ecs_task_definition" "app" {
         # DB creds pulled from the RDS-managed secret JSON by key (ECS supports the :json-key:: suffix).
         { name = "DB_USERNAME", valueFrom = "${var.db_master_secret_arn}:username::" },
         { name = "DB_PASSWORD", valueFrom = "${var.db_master_secret_arn}:password::" },
+        # Phase 10-1 Stage 2: the eop_app runtime password. The app datasource connects as eop_app with this;
+        # Flyway (master, via DB_USERNAME/DB_PASSWORD) sets the role's password to it via the V11 placeholder.
+        { name = "EOP_APP_DB_PASSWORD", valueFrom = aws_secretsmanager_secret.eop_app.arn },
       ]
       logConfiguration = {
         logDriver = "awslogs"

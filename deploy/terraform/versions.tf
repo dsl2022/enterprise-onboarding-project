@@ -12,5 +12,10 @@ terraform {
       source  = "hashicorp/azuread"
       version = "~> 2.53"
     }
+    # Phase 10-1 Stage 2: generate the eop_app runtime DB password (stored in Secrets Manager, never state-legible).
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
+    }
   }
 }

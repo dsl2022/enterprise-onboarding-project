@@ -4,9 +4,12 @@
 # by ECS from the RDS-managed secret (never committed, never an env literal in TF).
 spring:
   datasource:
+    # Phase 10-1 Stage 2: the RUNTIME connection uses the least-privilege role eop_app (no UPDATE/DELETE on
+    # audit; ADR-0026). Password auth (IAM-token login is blocked in this env — #175). In tests the
+    # @ServiceConnection Testcontainer overrides url/username/password, so these values are only read on ECS.
     url: jdbc:postgresql://${DB_HOST}:${DB_PORT:5432}/${DB_NAME:eop}
-    username: ${DB_USERNAME}
-    password: ${DB_PASSWORD}
+    username: eop_app
+    password: ${EOP_APP_DB_PASSWORD}
     hikari:
       # On the first Phase-2 roll RDS may still be initializing. Don't hard-fail the pool at startup;
       # Flyway's connect-retries (below) does the actual waiting before the first query.
@@ -24,6 +27,16 @@ spring:
     open-in-view: false
   flyway:
     enabled: true
+    # Phase 10-1 Stage 2: MIGRATOR = the master user (needs DDL + role admin), distinct from the eop_app
+    # runtime datasource above. No flyway.url → Flyway reuses the datasource URL with THESE creds. Defaults are
+    # the Testcontainers superuser ("test"/"test") so CI/local — where DB_USERNAME/DB_PASSWORD are unset and
+    # @ServiceConnection provides the container — still migrates as a superuser (DDL works).
+    user: ${DB_USERNAME:test}
+    password: ${DB_PASSWORD:test}
+    # V11 sets eop_app's password from this placeholder (= the same secret the datasource reads). Default keeps
+    # CI green (eop_app is never connected-to in tests; @ServiceConnection uses the container superuser).
+    placeholders:
+      eop_app_password: ${EOP_APP_DB_PASSWORD:test}
     # ~10 min RDS cold-start budget (60 * 10s) so the app waits the DB out instead of crash-looping.
     connect-retries: 60
     connect-retries-interval: 10
