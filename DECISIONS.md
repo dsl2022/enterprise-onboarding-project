@@ -758,7 +758,18 @@ we took the architect's **fallback**: `eop_app` authenticates with a **managed p
 PASSWORD` fed from a CMK-encrypted Secrets Manager secret via a Flyway placeholder; the app datasource reads the
 same secret; Flyway stays master). **Security posture is identical** — the least-privilege role + audit REVOKE
 (the actual goal) are unchanged; only the login mechanism differs (a managed secret, exactly like the RDS master
-user — not a narrative regression). The IAM-auth infra (rds_iam grant, instance flag, task `rds-db:connect`) is
-**left in place** — harmless when unused — so IAM can be retried later with zero TF change if the root cause is
-found. The JDBC-wrapper dependency is therefore **not** needed. `initialization-fail-timeout=-1` keeps the
-runtime pool's first connect lazy (after Flyway/master has run V11), preserving cold-boot safety.
+user — not a narrative regression). The JDBC-wrapper dependency is therefore **not** needed.
+`initialization-fail-timeout=-1` keeps the runtime pool's first connect lazy (after Flyway/master has run V11),
+preserving cold-boot safety.
+
+**Stage 2 fix (2026-07-01) — the `rds_iam` grant is NOT harmless; it must be REVOKED for password auth (V12).**
+The first Stage-2 rollout crash-looped: `FATAL: PAM authentication failed for user "eop_app"`. Root cause: RDS's
+IAM pg_hba rule `hostssl all +rds_iam all pam` routes **every SSL connection from an `rds_iam` member** through
+PAM (IAM-token) auth — so while `eop_app` holds `rds_iam` (V10), a *password* login is impossible (and the
+non-SSL fallback is rejected for "no encryption"). The two auth modes are **mutually exclusive** for a role.
+**V12 `REVOKE rds_iam FROM eop_app`** (guarded `IF EXISTS`) + `sslmode=require` on the datasource URL fixes it:
+SSL connections now match the normal password rule. This also refines the earlier "retry IAM with zero TF
+change" note — a retry would re-grant `rds_iam` (a migration) **and** resolve the #175 authz failure. The
+instance IAM flag + task `rds-db:connect` policy remain (genuinely harmless); only the role grant is auth-mode-
+determining. Lesson: `rds_iam` membership is not a passive capability — it changes which pg_hba rule a
+connection matches.
