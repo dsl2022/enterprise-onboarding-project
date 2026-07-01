@@ -696,3 +696,53 @@ DDL is legitimate in a contract (N+1) release; the guard exists to make the expa
 **Consequences:** The discipline is owed now (Phase 8), not deferred to Phase 9; it is therefore decoupled
 from whether the blue/green machinery is ever built. Reviewers and the soft guard carry it. The cost is a
 two-release dance for destructive schema changes (acceptable; standard for zero-downtime systems).
+
+## ADR-0026 — Phase 10-1: least-privilege runtime DB role (RDS IAM auth) + the audit REVOKE
+**Status:** Accepted. **Two-stage rollout** (see Rollout) so the live cutover carries no cold-boot risk.
+**Note on numbering:** the assistant track's in-flight provenance ADR (drafted as a standalone
+`docs/ADR-0024-...` file) must be renumbered to **ADR-0027** when it merges — this inline registry is the
+single source of truth and 0026 is taken here.
+
+**Context:** `audit.audit_events` is protected by the V8 `BEFORE UPDATE/DELETE` immutability trigger — but
+the app connects as the **RDS master user** (`eopadmin`, injected from the RDS-managed secret), which *owns*
+the schema and could drop the trigger and rewrite history. The trigger is belt; the real guarantee is a
+runtime role that structurally lacks the privilege. (This closes the "role REVOKE rides Phase 10" note left
+in V8.)
+
+**Decision — split "migrate" from "run" (standard two-role pattern):**
+- **Migrator = the RDS master.** Flyway keeps connecting as `eopadmin` (it needs DDL + role admin). Migrations
+  run as master.
+- **Runtime = `eop_app`** (Flyway V10 creates it, idempotently). Grants: `SELECT` on all app schemas;
+  `INSERT/UPDATE/DELETE` on the **mutable** schemas (`messaging, request, platform, access, teams, notify`);
+  **`INSERT`-only on `audit.audit_events`** with an explicit `REVOKE UPDATE, DELETE, TRUNCATE` (defense in
+  depth over by-omission). `ALTER DEFAULT PRIVILEGES` sets the same defaults for **future** tables/sequences
+  so a new migration can't accidentally lock the app out of its own new table (ties to ADR-0025). Coverage is
+  **repo-wide**: the USAGE grant + both default-privilege blocks include the reserved empty schemas
+  (`directory`, `onboarding`, `registry`) too — so the "privilege-safe by default" claim holds even for the
+  schema (`directory`, the Graph module) most likely to gain a table next; otherwise that table would work as
+  master but break as `eop_app` after Stage 2.
+- **Auth = RDS IAM database auth** (chosen over a second stored password): `eop_app` is `LOGIN` +
+  `GRANT rds_iam` (guarded `IF EXISTS` so V10 also runs on vanilla Postgres in CI/Testcontainers); the ECS
+  **task role** gets `rds-db:connect` scoped to `dbuid:<DbiResourceId>/eop_app`; the instance gets
+  `iam_database_authentication_enabled = true`. **No stored DB password for the runtime path** — on-theme
+  with the project's WIF/OIDC zero-stored-credentials identity ("even the DB login is credential-less"). The
+  app uses the AWS Advanced JDBC Wrapper (`iam` plugin) with Hikari `maxLifetime < 15m` for token refresh, and
+  SSL (IAM auth mandates TLS). Flyway keeps a **separate** datasource on the master secret.
+
+**Rollout (two stages — the cold-boot guard):** blue/green/rolling means old+new tasks share the DB, and the
+runtime role must exist *before* any task connects as it.
+- **Stage 1 (this PR + its gated apply — SAFE):** V10 creates `eop_app`; TF enables instance IAM auth + the
+  task `rds-db:connect` policy. The **running app still connects as master** — Stage 1 only *adds* capability,
+  so there is zero cold-boot risk. After apply, an IAM connection as `eop_app` can be smoke-tested (psql-runner
+  pattern) to prove the role + IAM path before any cutover.
+- **Stage 2 (separate PR — the cutover):** point `spring.datasource` at `eop_app`/IAM (Flyway stays master).
+  Deployed only after Stage 1 is confirmed live. Hikari `initialization-fail-timeout=-1` keeps the first
+  runtime connection lazy (after Flyway/migrator has run), which is the ordering that makes a cold boot safe.
+
+**Guarded by** `LeastPrivRuntimeRoleTest` (Testcontainers): after V10, `has_table_privilege('eop_app', …)`
+proves INSERT+SELECT-but-not-UPDATE/DELETE on audit, and writable mutable schemas. The IAM-token path itself
+is only exercisable against real RDS (verified post-apply), not in CI.
+
+**Consequences:** the audit table verified single-writer + hash-chained (Phase 6a / #162) is now append-only
+at the **engine** level too — the app cannot rewrite history regardless of the trigger. Cost: a JDBC-wrapper
+dependency + token-refresh tuning (Stage 2), and the two-stage rollout discipline.

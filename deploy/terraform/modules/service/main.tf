@@ -72,6 +72,26 @@ resource "aws_iam_role_policy_attachment" "task_issuer" {
   policy_arn = var.issuer_task_access_policy_arn
 }
 
+# Phase 10-1 (ADR-0026): let the app authenticate to RDS as the least-privilege runtime role `eop_app` via a
+# short-lived IAM token (no stored DB password). Scoped to exactly the eop_app DB user on this instance — the
+# master user (Flyway/migrator) still uses its Secrets Manager password, untouched. The resource uses the RDS
+# DbiResourceId, so it survives an endpoint rename but is pinned to this instance.
+data "aws_region" "current" {}
+data "aws_caller_identity" "current" {}
+
+data "aws_iam_policy_document" "task_rds_connect" {
+  statement {
+    actions   = ["rds-db:connect"]
+    resources = ["arn:aws:rds-db:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:dbuid:${var.db_resource_id}/eop_app"]
+  }
+}
+
+resource "aws_iam_role_policy" "task_rds_connect" {
+  name   = "rds-iam-connect-eop-app"
+  role   = aws_iam_role.task.id
+  policy = data.aws_iam_policy_document.task_rds_connect.json
+}
+
 # ---- Task definition + service (only once a real image exists) ----
 resource "aws_ecs_task_definition" "app" {
   count                    = local.has_image ? 1 : 0

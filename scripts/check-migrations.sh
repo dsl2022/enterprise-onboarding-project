@@ -62,6 +62,9 @@ scan() { # file label egrep-pattern
     [[ -z "$ln" ]] && continue
     # ignore matches that sit after a -- comment marker
     local code="${rest%%--*}"
+    # A REVOKE line is hardening, never destructive (e.g. `REVOKE ... TRUNCATE` on an append-only table) —
+    # don't cry wolf on it.
+    echo "$code" | grep -Eiq '^[[:space:]]*revoke[[:space:]]' && continue
     if echo "$code" | grep -Eiq "$pat"; then
       warn "$file" "$ln" "$label"
       hits=$((hits + 1))
@@ -76,6 +79,7 @@ scan_unless() { # file label pos-pattern neg-pattern
   while IFS=: read -r ln rest; do
     [[ -z "$ln" ]] && continue
     local code="${rest%%--*}"
+    echo "$code" | grep -Eiq '^[[:space:]]*revoke[[:space:]]' && continue
     if echo "$code" | grep -Eiq "$pos" && ! echo "$code" | grep -Eiq "$neg"; then
       warn "$file" "$ln" "$label"
       hits=$((hits + 1))
