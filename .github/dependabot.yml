@@ -1,0 +1,15 @@
+# Keeps the SHA-pinned GitHub Actions current (DECISIONS ADR-0009 / Phase 10-2). Pinning to commit SHAs
+# closes the mutable-tag supply-chain hole; Dependabot bumps the SHA *and* its `# vX.Y.Z` comment together so
+# the pins don't rot. Grouped into one weekly PR to keep noise low.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "ci(deps)"

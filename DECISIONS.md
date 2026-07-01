@@ -60,11 +60,20 @@ only thing needed to produce the jar (locally and in CI). No Maven/Gradle wrappe
 **Consequences:** `ci.yml` builds via `docker build` (also Trivy-scannable); developers without Maven
 use Docker. Revisit if we want fast non-Docker unit-test runs in CI (add `setup-java` + a wrapper then).
 
-## ADR-0009 (TODO/hardening) — Pin GitHub Actions to commit SHAs
-**Context:** godaddy pins all third-party actions to commit SHAs (supply-chain). This scaffold pins to
-version tags (e.g. `@v4`) for the first PR because SHAs can't be resolved offline.
-**Decision (deferred):** Before merging to `main` for real use, replace tag pins with commit SHAs.
-Tracked as a hardening task.
+## ADR-0009 — Pin GitHub Actions to commit SHAs
+**Status:** Accepted — **implemented in Phase 10-2** (was deferred/TODO through v1 build). Closes #47.
+**Context:** godaddy pins all third-party actions to commit SHAs (supply-chain). The scaffold pinned to
+version tags (e.g. `@v4`) through the v1 build because SHAs couldn't be resolved offline. A mutable tag is a
+supply-chain hole: a compromised or re-pointed `@v4` runs attacker code with our OIDC-federated AWS/Entra
+creds (the workflows assume the DEPLOY/APPLY roles). 
+**Decision (implemented):** All third-party `uses:` across the five workflows (`ci`, `infra`,
+`app-deploy`, `frontend-deploy`, `infra-destroy`) are pinned to **full 40-char commit SHAs** with a trailing
+`# vX.Y.Z` comment for readability — 8 unique actions (`actions/checkout|setup-java|setup-node|github-script`,
+`aws-actions/configure-aws-credentials|amazon-ecr-login`, `hashicorp/setup-terraform`,
+`browser-actions/setup-chrome`). A `.github/dependabot.yml` `github-actions` ecosystem (weekly) keeps the pins
+current — Dependabot bumps the SHA **and** the comment together, so pinning doesn't mean going stale.
+**Consequences:** immutable action refs (a re-pointed tag can't inject code); the cost is a Dependabot PR
+when an action releases — the correct trade for a security-portfolio repo whose CI holds cloud credentials.
 
 ## ADR-0011 — CI Entra identity needs Application.ReadWrite.All (not OwnedBy)
 **Context:** Phase 3's first apply failed: `eop-github-ci` (granted `Application.ReadWrite.OwnedBy`)
