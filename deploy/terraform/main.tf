@@ -127,6 +127,7 @@ module "service" {
   db_host              = module.data.endpoint
   db_port              = module.data.port
   db_name              = module.data.db_name
+  db_resource_id       = module.data.resource_id
   db_master_secret_arn = module.data.master_user_secret_arn
   redis_host           = module.cache.primary_endpoint
   redis_port           = module.cache.port

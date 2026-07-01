@@ -58,6 +58,10 @@ variable "db_port" {
   default = 5432
 }
 variable "db_name" { type = string }
+variable "db_resource_id" {
+  description = "RDS DbiResourceId (db-XXXX) — scopes the task role's rds-db:connect to the eop_app DB user (Phase 10-1 IAM database auth)."
+  type        = string
+}
 variable "db_master_secret_arn" {
   description = "ARN of the RDS-managed master-user secret (CMK-encrypted JSON). username/password injected via ECS secrets."
   type        = string

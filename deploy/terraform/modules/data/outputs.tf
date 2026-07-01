@@ -19,3 +19,8 @@ output "master_user_secret_arn" {
 output "security_group_id" {
   value = aws_security_group.db.id
 }
+
+output "resource_id" {
+  description = "RDS DbiResourceId (db-XXXX). Used to build the rds-db:connect ARN for IAM database auth."
+  value       = aws_db_instance.this.resource_id
+}
