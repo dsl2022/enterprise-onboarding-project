@@ -746,3 +746,19 @@ is only exercisable against real RDS (verified post-apply), not in CI.
 **Consequences:** the audit table verified single-writer + hash-chained (Phase 6a / #162) is now append-only
 at the **engine** level too — the app cannot rewrite history regardless of the trigger. Cost: a JDBC-wrapper
 dependency + token-refresh tuning (Stage 2), and the two-stage rollout discipline.
+
+**Stage 2 update (2026-07-01) — shipped with a managed PASSWORD, not IAM-token, login (#175).** Stage 1 went
+live and was verified (role, grants, audit REVOKE, RDS IAM-auth flag, task `rds-db:connect` — all confirmed on
+the real RDS). But the IAM **token login** for `eop_app` fails with RDS `PAM authenticate failed: Permission
+denied`, despite an exact-matching `rds-db:connect` policy, a well-formed token signed by `eop-dev-task`, no
+permissions boundary, engine IAM-readiness (pg_hba `+rds_iam` rule matched), and >1h elapsed (not propagation);
+the IAM policy simulator can't even model `rds-db:connect` (false-negative, proven via `simulate-custom-policy`).
+Per a time-boxed 3-check diagnosis (exact error ✓, `rds_iam` membership ✓, real token+TLS ✓ — none the culprit),
+we took the architect's **fallback**: `eop_app` authenticates with a **managed password** (V11 `ALTER ROLE …
+PASSWORD` fed from a CMK-encrypted Secrets Manager secret via a Flyway placeholder; the app datasource reads the
+same secret; Flyway stays master). **Security posture is identical** — the least-privilege role + audit REVOKE
+(the actual goal) are unchanged; only the login mechanism differs (a managed secret, exactly like the RDS master
+user — not a narrative regression). The IAM-auth infra (rds_iam grant, instance flag, task `rds-db:connect`) is
+**left in place** — harmless when unused — so IAM can be retried later with zero TF change if the root cause is
+found. The JDBC-wrapper dependency is therefore **not** needed. `initialization-fail-timeout=-1` keeps the
+runtime pool's first connect lazy (after Flyway/master has run V11), preserving cold-boot safety.
