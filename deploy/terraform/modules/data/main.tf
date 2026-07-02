@@ -43,9 +43,11 @@ resource "aws_db_instance" "this" {
   manage_master_user_password   = true
   master_user_secret_kms_key_id = var.kms_key_arn
 
-  # Phase 10-1 (ADR-0026): allow RDS IAM database auth so the app's least-privilege runtime role (`eop_app`,
-  # created in Flyway V10) can log in with a short-lived IAM token instead of a stored password. Master-user
-  # auth (Flyway/migrator) is unaffected. Enabling is a no-downtime modify.
+  # Phase 10-1 (ADR-0026): RDS IAM database auth was the preferred mechanism for the least-privilege runtime role
+  # (`eop_app`), but its token login is blocked in this environment (#175) and rds_iam membership is
+  # auth-mode-determining, so eop_app uses a managed password instead (V11/V12). This flag is left ENABLED as a
+  # deliberate no-op: it costs nothing while unused, and disabling it is a needless RDS modify. It keeps the door
+  # open to retry IAM auth later with no instance change. Master-user auth (Flyway/migrator) is unaffected.
   iam_database_authentication_enabled = true
 
   multi_az               = var.multi_az
