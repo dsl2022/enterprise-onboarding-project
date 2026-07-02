@@ -7,7 +7,10 @@ spring:
     # Phase 10-1 Stage 2: the RUNTIME connection uses the least-privilege role eop_app (no UPDATE/DELETE on
     # audit; ADR-0026). Password auth (IAM-token login is blocked in this env — #175). In tests the
     # @ServiceConnection Testcontainer overrides url/username/password, so these values are only read on ECS.
-    url: jdbc:postgresql://${DB_HOST}:${DB_PORT:5432}/${DB_NAME:eop}
+    # sslmode=require: RDS rejects unencrypted connections ("no encryption"), and encryption is mandatory for
+    # the DB password not to cross the wire in the clear. (Testcontainers has no TLS, but @ServiceConnection
+    # replaces this whole URL there, so it only applies on ECS.)
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT:5432}/${DB_NAME:eop}?sslmode=require
     username: eop_app
     password: ${EOP_APP_DB_PASSWORD}
     hikari:
