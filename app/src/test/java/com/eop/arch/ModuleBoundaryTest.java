@@ -127,14 +127,19 @@ class ModuleBoundaryTest {
                             "java..", "jakarta..", "org.springframework..", "org.slf4j..", "com.fasterxml..");
 
     /**
-     * {@code assistant} (Phase 7) is the contract stub — a controller that gates on {@code assistant.use} and
-     * returns 501. It depends ONLY on {@code authz} + {@code platform} (+ framework), never on a domain
-     * module. The real wizard (RAG/tools) is deferred; when it lands it gets its own, broader review.
+     * {@code assistant} — the controller stub (Phase 7, gates on {@code assistant.use}, returns 501) plus the
+     * v2 model port ({@code assistant.model}: the {@link com.eop.assistant.model.ChatModelClient} seam, the
+     * deterministic validator, and the Bedrock adapter). It depends ONLY on {@code authz} + {@code platform}
+     * (+ framework) and, for the Bedrock adapter, the {@code software.amazon.awssdk} SDK — NEVER on a domain
+     * module. The port is advisory by construction: no {@code request}/{@code directory}/{@code access} import,
+     * so the assistant cannot write governed state or call Graph. Widened for the model port PR; the endpoints
+     * stay 501 (the wizard wiring is a later, separately-reviewed increment).
      */
     @ArchTest
     static final ArchRule assistant_module_boundary =
             classes().that().resideInAPackage("com.eop.assistant..")
                     .should().onlyDependOnClassesThat()
                     .resideInAnyPackage("com.eop.assistant..", "com.eop.authz..", "com.eop.platform..",
-                            "java..", "jakarta..", "org.springframework..", "org.slf4j..", "com.fasterxml..");
+                            "java..", "jakarta..", "org.springframework..", "org.slf4j..", "com.fasterxml..",
+                            "software.amazon.awssdk..");
 }
