@@ -22,13 +22,19 @@ entra_app_role_assignments = [
 # entra_require_app_role_assignment = true
 
 # ---- Phase 4b/5b: per-vertical real provisioning ----
-# Both verticals real: Application.ReadWrite.OwnedBy (4b) + GroupMember.ReadWrite.All (5b) are both
-# admin-consented on the eop-dev-app SP (2026-06-29), consent in place BEFORE the flip. access=true sets
-# EOP_PROVISIONING_ACCESS_SIMULATE=false → the real GraphGroupMembershipProvisioner; the post-flip task
-# roll mints a fresh token that carries GroupMember (access was simulated until now, so no cached pre-consent
-# token issue).
+# Onboarding real (4b): Application.ReadWrite.OwnedBy admin-consented on the eop-dev-app SP (2026-06-29);
+# the real GraphProvisioner CREATES an app registration (POST /applications) — no pre-existing object needed.
+#
+# Access provisioning is SIMULATED in dev (2026-07-03). GroupMember.ReadWrite.All is consented, but real
+# access provisioning also needs the access catalog's `mappedGroup` values to be real Entra group OBJECT IDs
+# (GUIDs) — Graph `POST /groups/{id}/members/$ref` requires a GUID, not a name. The dev catalog is seeded with
+# friendly placeholder names (eop-approvers, aws-prod-engineers, …), so real provisioning returned
+# `400 Invalid object identifier '<name>'` and rows stuck in PROVISIONING, retrying hourly forever (no terminal
+# FAILED state). Flipping to simulate=true makes the simulator grant them (it ignores group validity) — clears
+# the stuck queue and stops the audit-noise. Re-enable access=true only AFTER real dev groups exist and their
+# GUIDs are mapped into the catalog (see #79 / access-provisioning follow-up).
 onboarding_provisioning_real = true
-access_provisioning_real     = true
+access_provisioning_real     = false
 
 # ---- Phase 8: HA ----
 # App tier runs 2 Fargate tasks across 2 AZs (the service module default desired_count=2) — real app-tier HA.
