@@ -24,8 +24,10 @@ resource "aws_secretsmanager_secret_version" "flow1" {
 # same pattern as the RDS master user, one more CMK-encrypted secret. Flyway (master) sets the role's password
 # from this secret via V11's ${eop_app_password} placeholder; the app datasource reads the same secret. The
 # password never enters Terraform state legibly (random_password.result is sensitive; the secret is CMK-encrypted).
-# The IAM-auth infra (rds_iam grant, instance IAM flag, task rds-db:connect) is left in place — harmless when
-# unused, and lets us retry IAM later with no TF change.
+# IAM-token auth was abandoned, not merely unused: rds_iam membership is auth-mode-determining — RDS's
+# `hostssl … +rds_iam … pam` rule routes every SSL login from a member through PAM, so a *password* login fails
+# until rds_iam is revoked (V12 does this). The dead task-role rds-db:connect grant has been removed. The
+# instance-level iam_database_authentication flag is left enabled as a harmless no-op — toggling it modifies RDS.
 resource "random_password" "eop_app" {
   length  = 32
   special = false # alphanumeric — safe in the ALTER ROLE SQL string and a JDBC URL, no escaping surprises
@@ -95,25 +97,12 @@ resource "aws_iam_role_policy_attachment" "task_issuer" {
   policy_arn = var.issuer_task_access_policy_arn
 }
 
-# Phase 10-1 (ADR-0026): let the app authenticate to RDS as the least-privilege runtime role `eop_app` via a
-# short-lived IAM token (no stored DB password). Scoped to exactly the eop_app DB user on this instance — the
-# master user (Flyway/migrator) still uses its Secrets Manager password, untouched. The resource uses the RDS
-# DbiResourceId, so it survives an endpoint rename but is pinned to this instance.
-data "aws_region" "current" {}
-data "aws_caller_identity" "current" {}
-
-data "aws_iam_policy_document" "task_rds_connect" {
-  statement {
-    actions   = ["rds-db:connect"]
-    resources = ["arn:aws:rds-db:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:dbuid:${var.db_resource_id}/eop_app"]
-  }
-}
-
-resource "aws_iam_role_policy" "task_rds_connect" {
-  name   = "rds-iam-connect-eop-app"
-  role   = aws_iam_role.task.id
-  policy = data.aws_iam_policy_document.task_rds_connect.json
-}
+# Phase 10-1 (ADR-0026): IAM database auth was the preferred credential mechanism, but its token login is blocked
+# in this environment and — more fundamentally — rds_iam membership is auth-mode-determining, so it can't coexist
+# with the password auth eop_app actually uses (see the random_password comment below and V12). The task-role
+# `rds-db:connect` policy that scoped IAM login to the eop_app DB user was therefore removed as dead code. No
+# runtime path used it once eop_app switched to password auth. To retry IAM later, re-add the policy AND re-grant
+# rds_iam AND resolve the #175 token-authz failure.
 
 # ---- Task definition + service (only once a real image exists) ----
 resource "aws_ecs_task_definition" "app" {

@@ -773,3 +773,14 @@ change" note — a retry would re-grant `rds_iam` (a migration) **and** resolve 
 instance IAM flag + task `rds-db:connect` policy remain (genuinely harmless); only the role grant is auth-mode-
 determining. Lesson: `rds_iam` membership is not a passive capability — it changes which pg_hba rule a
 connection matches.
+
+**Tidy (2026-07-02) — removed the now-dead IAM-token infra after P10-1 was verified live.** Once `eop_app`
+settled on password auth (V11/V12) and the full auth+authz flow was proven on real RDS, the task-role
+`rds-db:connect` policy (+ its `aws_region`/`aws_caller_identity` data sources and the `db_resource_id`
+var/output/wiring) was **dead code** — no runtime path used it, and it's a small over-grant, precisely the
+thing this least-privilege phase exists to remove. Deleted. The instance-level
+`iam_database_authentication_enabled` flag is **kept enabled** as a deliberate no-op: it costs nothing while
+unused and disabling it is a needless RDS modify. Net: to retry IAM auth later you re-add the `rds-db:connect`
+policy **and** re-grant `rds_iam` (a migration) **and** resolve the #175 token-authz failure — the instance
+flag is the only piece left standing. This supersedes the prior note's "the task `rds-db:connect` policy
+remain[s]" line.
