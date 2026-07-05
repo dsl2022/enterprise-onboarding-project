@@ -37,13 +37,13 @@ onboarding_provisioning_real = true
 access_provisioning_real     = false
 
 # ---- v2 assistant (Rung 1): advisory form-fill on /assistant/chat, Bedrock-backed ----
-# PREREQUISITE (do BEFORE approving the apply): enable Amazon Bedrock model access for the model id below in
-# us-east-1 (Bedrock console → Model access → request Anthropic Claude 3.5 Haiku). Model access is opt-in
-# per-model-per-region; without it the task role's bedrock:InvokeModel grant is valid but the call returns
-# AccessDeniedException and /assistant/chat 500s (the app still boots — only the endpoint errors). Once enabled,
-# this flips the endpoint from 501 to the live advisory assistant and attaches the scoped InvokeModel grant.
-# If on-demand invoke for the direct model id is not available in-region, set assistant_model_id to the
-# cross-region inference profile id "us.anthropic.claude-3-5-haiku-20241022-v1:0".
+# Model: Haiku-tier via the us.* inference profile (current Claude models are INFERENCE_PROFILE-only on Bedrock;
+# a bare foundation-model id returns end-of-life/validation errors). The default assistant_model_id
+# (us.anthropic.claude-haiku-4-5-20251001-v1:0) is already correct, so no override is needed here.
+# Bedrock model access is auto-enabled on first invoke now (the manual "Model access" page was retired) — an
+# InvokeModel test against this profile already succeeded in this account (2026-07-05), so no manual activation
+# step remains. Flipping this true attaches the scoped bedrock:InvokeModel grant and turns /assistant/chat from
+# 501 into the live advisory assistant on the next apply/roll.
 assistant_enabled = true
 
 # ---- Phase 8: HA ----

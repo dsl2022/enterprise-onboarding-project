@@ -96,7 +96,7 @@ variable "assistant_enabled" {
 variable "assistant_model_id" {
   description = "Bedrock model id for the assistant (Converse). Haiku-tier default; use the us.* inference-profile id if the region requires it."
   type        = string
-  default     = "anthropic.claude-3-5-haiku-20241022-v1:0"
+  default     = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 }
 
 # Phase 8 (HA): number of Fargate tasks. Default 2 for high availability (survive one task/AZ loss). Fixed,

@@ -437,24 +437,29 @@ source of truth); re-provision (null `external_ref` to force the Graph path) →
 The assistant (`POST /assistant/chat`) is built and ships **dark**: `501` until `assistant_enabled=true`. Enabling
 it points the model port at Amazon Bedrock (Claude, Converse API) using the **task role** — no stored API key.
 
-**PREREQUISITE (human, do this BEFORE approving the apply):** enable Bedrock **model access** for the model —
-it's opt-in per-model-per-region and cannot be done in Terraform.
+**Model access is now automatic.** AWS retired the manual "Model access" page — serverless foundation models
+auto-enable on first invoke (Anthropic models may prompt a one-time use-case form). No pre-activation step. An
+`InvokeModel` test in this account already succeeded (2026-07-05), so nothing manual remains for dev.
+
+**Model id — use the `us.*` inference profile.** Current Claude models on Bedrock are **INFERENCE_PROFILE-only**;
+a bare foundation-model id (e.g. `anthropic.claude-haiku-4-5-20251001-v1:0`) returns
+`ResourceNotFoundException: end of life` / validation errors. The default `assistant_model_id` is the profile
+`us.anthropic.claude-haiku-4-5-20251001-v1:0`. Find the current ids + verify an invoke:
 
 ```bash
-# One-time per account+region. Console: Bedrock → Model access → Manage → request "Anthropic Claude 3.5 Haiku"
-# (us-east-1), then wait until status = Access granted. Verify from the CLI:
-aws bedrock list-foundation-models --region us-east-1 \
-  --query "modelSummaries[?contains(modelId,'claude-3-5-haiku')].modelId" --output text
-# Sanity-check an invoke works (optional, from any box with creds):
-aws bedrock-runtime converse --region us-east-1 \
-  --model-id anthropic.claude-3-5-haiku-20241022-v1:0 \
-  --messages '[{"role":"user","content":[{"text":"ping"}]}]' \
-  --inference-config '{"maxTokens":16}' --query 'output.message.content[0].text' --output text
+# Which Claude models are ACTIVE (and their inference type — expect INFERENCE_PROFILE):
+aws bedrock list-foundation-models --region us-east-1 --by-provider anthropic \
+  --query "modelSummaries[?modelLifecycle.status=='ACTIVE'].[modelId,inferenceTypesSupported]" --output text
+# Sanity-check an invoke via the profile (older CLIs have invoke-model, not converse):
+aws bedrock-runtime invoke-model --region us-east-1 \
+  --model-id us.anthropic.claude-haiku-4-5-20251001-v1:0 \
+  --content-type application/json --accept application/json --cli-binary-format raw-in-base64-out \
+  --body '{"anthropic_version":"bedrock-2023-05-31","max_tokens":16,"messages":[{"role":"user","content":"ping"}]}' \
+  /tmp/out.json && python3 -c "import json;print(json.load(open('/tmp/out.json'))['content'][0]['text'])"
 ```
 
-- If on-demand invoke for the **direct** model id isn't offered in-region, set
-  `assistant_model_id = "us.anthropic.claude-3-5-haiku-20241022-v1:0"` (cross-region inference profile) in
-  `dev.tfvars` — the task policy already covers both foundation-model and `us.*` inference-profile ARNs.
+- The task IAM policy is scoped tier-level (`anthropic.claude-haiku-*` / `claude-sonnet-*`, foundation-model +
+  `us.*` inference-profile), so a model **version** bump only needs an `assistant_model_id` change, not IAM.
 
 **Flip on + roll.** `assistant_enabled = true` in `dev.tfvars` (done) → run `infra` + approve. This attaches the
 scoped `bedrock:InvokeModel` grant and sets `EOP_ASSISTANT_ENABLED=true` + `EOP_ASSISTANT_MODEL_PROVIDER=bedrock`

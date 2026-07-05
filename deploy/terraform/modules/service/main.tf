@@ -108,11 +108,15 @@ data "aws_caller_identity" "current" {}
 data "aws_iam_policy_document" "task_bedrock" {
   statement {
     actions = ["bedrock:InvokeModel"]
+    # Tier-level (version-agnostic) so a model version bump doesn't need an IAM change — the app pins the exact
+    # id via assistant_model_id. Current models are INFERENCE_PROFILE-only, so the grant must cover BOTH the
+    # us.* inference-profile ARN (the id the app calls) AND the underlying foundation-model ARNs the profile
+    # routes to across regions.
     resources = [
-      "arn:aws:bedrock:*::foundation-model/anthropic.claude-3-5-haiku-*",
-      "arn:aws:bedrock:*::foundation-model/anthropic.claude-3-5-sonnet-*",
-      "arn:aws:bedrock:${var.region}:${data.aws_caller_identity.current.account_id}:inference-profile/us.anthropic.claude-3-5-haiku-*",
-      "arn:aws:bedrock:${var.region}:${data.aws_caller_identity.current.account_id}:inference-profile/us.anthropic.claude-3-5-sonnet-*",
+      "arn:aws:bedrock:*::foundation-model/anthropic.claude-haiku-*",
+      "arn:aws:bedrock:*::foundation-model/anthropic.claude-sonnet-*",
+      "arn:aws:bedrock:${var.region}:${data.aws_caller_identity.current.account_id}:inference-profile/us.anthropic.claude-haiku-*",
+      "arn:aws:bedrock:${var.region}:${data.aws_caller_identity.current.account_id}:inference-profile/us.anthropic.claude-sonnet-*",
     ]
   }
 }
