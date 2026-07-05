@@ -54,6 +54,13 @@
       <groupId>software.amazon.awssdk</groupId>
       <artifactId>s3</artifactId>
     </dependency>
+    <!-- v2 assistant: the model port's Bedrock adapter (Claude via the Converse API). Version from the AWS
+         SDK BOM below. Created only when eop.assistant.model.provider=bedrock, so a default boot pulls no
+         Bedrock client and does no AWS lookup. -->
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>bedrockruntime</artifactId>
+    </dependency>
 
     <!-- Phase 2: persistence (JPA/Postgres + Flyway) and Redis-backed BFF session (Spring Session).
          Versions managed by the Boot 3.3 BOM, except where noted. -->
