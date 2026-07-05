@@ -36,6 +36,16 @@ entra_app_role_assignments = [
 onboarding_provisioning_real = true
 access_provisioning_real     = false
 
+# ---- v2 assistant (Rung 1): advisory form-fill on /assistant/chat, Bedrock-backed ----
+# PREREQUISITE (do BEFORE approving the apply): enable Amazon Bedrock model access for the model id below in
+# us-east-1 (Bedrock console → Model access → request Anthropic Claude 3.5 Haiku). Model access is opt-in
+# per-model-per-region; without it the task role's bedrock:InvokeModel grant is valid but the call returns
+# AccessDeniedException and /assistant/chat 500s (the app still boots — only the endpoint errors). Once enabled,
+# this flips the endpoint from 501 to the live advisory assistant and attaches the scoped InvokeModel grant.
+# If on-demand invoke for the direct model id is not available in-region, set assistant_model_id to the
+# cross-region inference profile id "us.anthropic.claude-3-5-haiku-20241022-v1:0".
+assistant_enabled = true
+
 # ---- Phase 8: HA ----
 # App tier runs 2 Fargate tasks across 2 AZs (the service module default desired_count=2) — real app-tier HA.
 # Data tier stays SINGLE-AZ in dev (cost): RDS single-AZ + a single-node Redis (a session SPOF, not an outage

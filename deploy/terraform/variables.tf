@@ -58,3 +58,15 @@ variable "access_provisioning_real" {
   type        = bool
   default     = false
 }
+
+variable "assistant_enabled" {
+  description = "v2 assistant Rung 1: enable the Bedrock-backed advisory /assistant/chat. Flip true only after Bedrock model access is enabled for the model id in this region."
+  type        = bool
+  default     = false
+}
+
+variable "assistant_model_id" {
+  description = "Bedrock model id for the assistant (Converse). Haiku-tier default; override with the us.* inference-profile id if the region requires it."
+  type        = string
+  default     = "anthropic.claude-3-5-haiku-20241022-v1:0"
+}

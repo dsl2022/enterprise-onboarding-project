@@ -431,3 +431,40 @@ source of truth); re-provision (null `external_ref` to force the Graph path) →
 > **Scope limit — tenant-broad grant.** `GroupMember.ReadWrite.All` lets the app modify ANY group's
 > membership (Graph has no per-group app-only scope). Fine for dev; constrain/monitor for prod
 > (CR-20260629-0030).
+
+## 11. v2 assistant Rung 1 — enable the Bedrock-backed advisory chat
+
+The assistant (`POST /assistant/chat`) is built and ships **dark**: `501` until `assistant_enabled=true`. Enabling
+it points the model port at Amazon Bedrock (Claude, Converse API) using the **task role** — no stored API key.
+
+**PREREQUISITE (human, do this BEFORE approving the apply):** enable Bedrock **model access** for the model —
+it's opt-in per-model-per-region and cannot be done in Terraform.
+
+```bash
+# One-time per account+region. Console: Bedrock → Model access → Manage → request "Anthropic Claude 3.5 Haiku"
+# (us-east-1), then wait until status = Access granted. Verify from the CLI:
+aws bedrock list-foundation-models --region us-east-1 \
+  --query "modelSummaries[?contains(modelId,'claude-3-5-haiku')].modelId" --output text
+# Sanity-check an invoke works (optional, from any box with creds):
+aws bedrock-runtime converse --region us-east-1 \
+  --model-id anthropic.claude-3-5-haiku-20241022-v1:0 \
+  --messages '[{"role":"user","content":[{"text":"ping"}]}]' \
+  --inference-config '{"maxTokens":16}' --query 'output.message.content[0].text' --output text
+```
+
+- If on-demand invoke for the **direct** model id isn't offered in-region, set
+  `assistant_model_id = "us.anthropic.claude-3-5-haiku-20241022-v1:0"` (cross-region inference profile) in
+  `dev.tfvars` — the task policy already covers both foundation-model and `us.*` inference-profile ARNs.
+
+**Flip on + roll.** `assistant_enabled = true` in `dev.tfvars` (done) → run `infra` + approve. This attaches the
+scoped `bedrock:InvokeModel` grant and sets `EOP_ASSISTANT_ENABLED=true` + `EOP_ASSISTANT_MODEL_PROVIDER=bedrock`
+on the task, then rolls it.
+
+**Verify live:** sign in, open the assistant, and on the onboarding wizard ask it to "draft a description for a
+billing service" → a `draftDescription` proposed action comes back you can accept into the field. Check the task
+logs show **no** `AccessDeniedException` (that means model access isn't granted yet). `/assistant/actions/{id}/approve`
+remains `501` (Rung 3). To turn it back off: `assistant_enabled = false` → apply (grant detaches, endpoint 501s).
+
+> **Guardrail recap.** The model is distrusted: every proposal is re-validated in Java against the four-tool
+> allow-list + per-tool arg rules before it reaches the UI, and the assistant imports no domain module, so it
+> cannot write governed state or call Graph. No transcripts are persisted (metadata log-level only).

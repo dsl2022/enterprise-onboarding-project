@@ -97,6 +97,33 @@ resource "aws_iam_role_policy_attachment" "task_issuer" {
   policy_arn = var.issuer_task_access_policy_arn
 }
 
+# v2 assistant (Rung 1): let the app invoke Claude on Amazon Bedrock (Converse API) as its OWN task identity —
+# no stored API key, consistent with the WIF/zero-stored-credentials posture. Attached ONLY when the assistant
+# is enabled (var.assistant_enabled), so a default deployment carries no Bedrock grant (least privilege). Scoped
+# to the Claude 3.5 Haiku/Sonnet family — Haiku is the Rung-1 default, Sonnet the per-tool opt-up fallback —
+# covering both direct foundation-model invocation and the cross-region inference profiles Bedrock may route
+# on-demand calls through.
+data "aws_caller_identity" "current" {}
+
+data "aws_iam_policy_document" "task_bedrock" {
+  statement {
+    actions = ["bedrock:InvokeModel"]
+    resources = [
+      "arn:aws:bedrock:*::foundation-model/anthropic.claude-3-5-haiku-*",
+      "arn:aws:bedrock:*::foundation-model/anthropic.claude-3-5-sonnet-*",
+      "arn:aws:bedrock:${var.region}:${data.aws_caller_identity.current.account_id}:inference-profile/us.anthropic.claude-3-5-haiku-*",
+      "arn:aws:bedrock:${var.region}:${data.aws_caller_identity.current.account_id}:inference-profile/us.anthropic.claude-3-5-sonnet-*",
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "task_bedrock" {
+  count  = var.assistant_enabled ? 1 : 0
+  name   = "assistant-bedrock-invoke"
+  role   = aws_iam_role.task.id
+  policy = data.aws_iam_policy_document.task_bedrock.json
+}
+
 # Phase 10-1 (ADR-0026): IAM database auth was the preferred credential mechanism, but its token login is blocked
 # in this environment and — more fundamentally — rds_iam membership is auth-mode-determining, so it can't coexist
 # with the password auth eop_app actually uses (see the random_password comment below and V12). The task-role
@@ -167,6 +194,14 @@ resource "aws_ecs_task_definition" "app" {
         # provisioner exists. Until then access stays simulated (the simulator reaches GRANTED with no Graph).
         var.access_provisioning_real ? [
           { name = "EOP_PROVISIONING_ACCESS_SIMULATE", value = "false" },
+        ] : [],
+        # v2 assistant (Rung 1): flip ONLY AFTER Bedrock model access is enabled for the model id in this region
+        # (opt-in per-model-per-region; see RUNBOOK). Turns on the advisory /assistant/chat and points the model
+        # port at Bedrock. Region comes from AWS_REGION (already set); the model id defaults to Haiku-tier.
+        var.assistant_enabled ? [
+          { name = "EOP_ASSISTANT_ENABLED", value = "true" },
+          { name = "EOP_ASSISTANT_MODEL_PROVIDER", value = "bedrock" },
+          { name = "EOP_ASSISTANT_MODEL_MODELID", value = var.assistant_model_id },
       ] : [])
       secrets = [
         { name = "ENTRA_CLIENT_SECRET", valueFrom = aws_secretsmanager_secret.flow1.arn },
