@@ -32,3 +32,6 @@ terraform.rc
 *.iml
 .vscode/
 .claude/
+branch_structure.json
+temp_auto_push.bat
+temp_interactive_push.bat

@@ -1,5 +1,5 @@
 /**
- * Typed mirror of the FROZEN API contract (docs/api/openapi-v1.yaml, v1.0.1).
+ * Typed mirror of the FROZEN API contract (docs/api/openapi-v1.yaml, v1.1.0).
  *
  * The OpenAPI document is authoritative — these types track it 1:1. Change them
  * only when a change-request (docs/change-requests/) lands and the contract bumps.
@@ -287,8 +287,12 @@ export interface AssistantChatRequest {
 
 export interface ProposedAction {
   id: string;
-  tool: 'draftDescription' | 'validateRedirectUris' | 'recommendScopes' | 'checkGroupOwnership';
+  tool: 'draftDescription' | 'draftJustification' | 'validateRedirectUris' | 'recommendScopes' | 'checkGroupOwnership';
   args: Record<string, unknown>;
+  /** The wizard form control this suggestion binds to (accept-into-field). Optional — added in v1.1.0. */
+  field?: string;
+  /** The model's short "why" for this suggestion. Optional — added in v1.1.0. */
+  rationale?: string;
   requiresApproval: boolean;
 }
 

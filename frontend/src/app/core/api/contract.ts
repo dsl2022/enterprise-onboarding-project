@@ -1445,10 +1445,12 @@ export interface components {
         ProposedAction: {
             id?: string;
             /** @enum {string} */
-            tool?: "draftDescription" | "validateRedirectUris" | "recommendScopes" | "checkGroupOwnership";
+            tool?: "draftDescription" | "draftJustification" | "validateRedirectUris" | "recommendScopes" | "checkGroupOwnership";
             args?: {
                 [key: string]: unknown;
             };
+            field?: string;
+            rationale?: string;
             requiresApproval?: boolean;
         };
         ApplicationPage: {
