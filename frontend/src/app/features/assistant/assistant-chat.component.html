@@ -29,7 +29,43 @@
             <div class="proposed">
               <span class="proposed-label text-subtle">Suggested (advisory — you decide):</span>
               @for (a of m.actions; track a.id) {
-                <span class="action-chip"><mat-icon>bolt</mat-icon>{{ toolLabel(a.tool) }}</span>
+                <div class="action-card">
+                  <div class="action-head"><mat-icon>bolt</mat-icon>{{ toolLabel(a.tool) }}</div>
+
+                  @if (actionText(a); as text) {
+                    <p class="action-value">{{ text }}</p>
+                    <button mat-stroked-button type="button" class="action-copy" (click)="copy(text)">
+                      <mat-icon>content_copy</mat-icon> Copy
+                    </button>
+                  }
+
+                  @if (actionScopes(a); as scopes) {
+                    <div class="action-scopes">
+                      @for (s of scopes; track s) {
+                        <span class="scope-chip">{{ s }}</span>
+                      } @empty {
+                        <span class="text-subtle">No scopes suggested.</span>
+                      }
+                    </div>
+                    @if (scopes.length > 0) {
+                      <button mat-stroked-button type="button" class="action-copy" (click)="copy(scopes.join(', '))">
+                        <mat-icon>content_copy</mat-icon> Copy
+                      </button>
+                    }
+                  }
+
+                  @if (actionUriResults(a); as results) {
+                    <ul class="uri-results">
+                      @for (r of results; track r.uri) {
+                        <li [class.valid]="r.valid" [class.invalid]="!r.valid">
+                          <mat-icon>{{ r.valid ? 'check_circle' : 'cancel' }}</mat-icon>
+                          <code>{{ r.uri }}</code>
+                          <span class="reason text-subtle">{{ r.reason }}</span>
+                        </li>
+                      }
+                    </ul>
+                  }
+                </div>
               }
             </div>
           }
