@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Enterprise Onboarding Portal API
-  version: 1.0.1
+  version: 1.1.0
   description: >
     v1 backend contract for the request → approve → provision → audit → notify portal.
     FROZEN (Phase 1) — change only via a new change request (docs/change-requests/). BFF pattern: auth via the
@@ -620,8 +620,13 @@ components:
       type: object
       properties:
         id: { type: string }
-        tool: { type: string, enum: [draftDescription, validateRedirectUris, recommendScopes, checkGroupOwnership] }
+        tool: { type: string, enum: [draftDescription, draftJustification, validateRedirectUris, recommendScopes, checkGroupOwnership] }
         args: { type: object, additionalProperties: true }
+        # field: the wizard form control this suggestion binds to (accept-into-field). rationale: the model's
+        # short "why". Both OPTIONAL — added additively in v1.1.0 (CR-20260630-0007 items 2 & 3); existing
+        # producers/consumers that omit them stay valid. draftJustification added to `tool` in the same CR.
+        field: { type: string }
+        rationale: { type: string }
         requiresApproval: { type: boolean }
 
     # ---- page wrappers (cursor pagination) ----
