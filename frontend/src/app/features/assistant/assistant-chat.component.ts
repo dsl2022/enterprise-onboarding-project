@@ -76,4 +76,34 @@ export class AssistantChatComponent {
   protected toolLabel(tool: ProposedAction['tool']): string {
     return TOOL_LABELS[tool] ?? tool;
   }
+
+  /** The drafted free-text for draftDescription / draftJustification (keyed by arg, not tool name, so it
+   *  renders even for tools not yet in the generated contract enum). */
+  protected actionText(a: ProposedAction): string | null {
+    const v = a.args['description'] ?? a.args['justification'];
+    return typeof v === 'string' && v.trim() ? v : null;
+  }
+
+  /** The suggested scope tokens for recommendScopes (else null). */
+  protected actionScopes(a: ProposedAction): string[] | null {
+    if (a.tool !== 'recommendScopes' || !Array.isArray(a.args['scopes'])) return null;
+    return (a.args['scopes'] as unknown[]).filter((s): s is string => typeof s === 'string');
+  }
+
+  /** The per-URI verdicts for validateRedirectUris (else null). */
+  protected actionUriResults(a: ProposedAction): UriVerdict[] | null {
+    if (a.tool !== 'validateRedirectUris' || !Array.isArray(a.args['results'])) return null;
+    return (a.args['results'] as UriVerdict[]).filter((r) => r && typeof r.uri === 'string');
+  }
+
+  /** Copy a suggestion to the clipboard so the user can paste it into the wizard field. */
+  protected copy(text: string): void {
+    void navigator.clipboard?.writeText(text);
+  }
+}
+
+interface UriVerdict {
+  uri: string;
+  valid: boolean;
+  reason: string;
 }
