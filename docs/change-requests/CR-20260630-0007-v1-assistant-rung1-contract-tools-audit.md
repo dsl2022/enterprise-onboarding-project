@@ -4,7 +4,7 @@
 - **Date:** 2026-06-30 00:07 EDT
 - **Author:** Senior-architect review of the assistant Rung 1 plan set (backend / frontend / test) (Claude)
 - **Target:** ADR-0023 (Phase 7 assistant stub) / [docs/assistant-feature-design-and-guardrails.md](../assistant-feature-design-and-guardrails.md) / the three Rung 1 plan docs (`ASSISTANT_BACKEND_PLAN`, `ASSISTANT_FRONTEND_PLAN`, `ASSISTANT_TEST_STRATEGY`)
-- **Status:** Accepted — items 1–7 folded into the 2026-06-30 plan revision (see **Disposition** below). **One residual open item** (R1: provenance-correlation mechanism) must be pinned before Rung 1 build; items 2 & 3 remain **contract-freeze** changes to route through the contract gate.
+- **Status:** Accepted — items 1–7 folded into the 2026-06-30 plan revision (see **Disposition** below). **One residual open item** (R1: provenance-correlation mechanism) must be pinned before Rung 1 build. **Items 2 & 3 APPLIED in contract v1.1.0 (2026-07-06)** — `draftJustification` added to `ProposedAction.tool`; optional `field` + `rationale` added to `ProposedAction` (see the **2026-07-06 Applied** note at the end).
 - **Related:** [docs/api/openapi-v1.yaml](../api/openapi-v1.yaml) (`AssistantChatRequest`/`AssistantChatResponse`/`ProposedAction` L608–625; `ApplicationCreate`/`AccessRequestCreate`/`CatalogResource`) · [app/src/main/java/com/eop/assistant/AssistantController.java](../../app/src/main/java/com/eop/assistant/AssistantController.java) (Rung 0 stub) · [app/src/main/java/com/eop/audit/](../../app/src/main/java/com/eop/audit/) (Phase 6a — projection target) · [app/src/main/java/com/eop/platform/OutboxWriter.java](../../app/src/main/java/com/eop/platform/OutboxWriter.java) · [app/src/main/java/com/eop/authz/Permission.java](../../app/src/main/java/com/eop/authz/Permission.java) (`ASSISTANT_USE`) · [DECISIONS.md](../../DECISIONS.md) (ADR-0023)
 
 ## Context
@@ -162,3 +162,23 @@ The three plan docs (backend / frontend / test) were revised against this CR. Pe
 **Net:** items 1–4, 6, 7 resolved; item 5 resolved in principle, pending **R1**. Build Rung 1 once R1 is pinned
 and R2/R3 corrected; route the contract additions (items 2 & 3 — `field`, `rationale`, `draftJustification`)
 through the contract-freeze gate.
+
+### 2026-07-06 — Applied: items 2 & 3 through the contract-freeze gate (v1.1.0)
+
+The two contract-freeze additions are now applied to [docs/api/openapi-v1.yaml](../api/openapi-v1.yaml), bumped
+**1.0.1 → 1.1.0** (additive, backward-compatible minor):
+
+- **Item 3 — `draftJustification`** added to the `ProposedAction.tool` enum (now five: `draftDescription`,
+  `draftJustification`, `validateRedirectUris`, `recommendScopes`, `checkGroupOwnership`). This reconciles the
+  frozen contract with `Rung1Tools.ALLOW_LIST` (shipped in #181), so the access-request justification suggestion
+  is emittable contract-cleanly. `checkGroupOwnership` is **retained** (still Rung-2 deferred), not removed.
+- **Item 2 — `field` + `rationale`** added as **optional** strings on `ProposedAction` (`field` = the
+  accept-into-form-control binding; `rationale` = the model's short "why"). Optional so existing producers
+  (the #181 backend emits neither) and consumers stay valid — a required field would have been breaking, not a
+  1.x bump.
+
+**Not** included (deliberate scope discipline): no new `tool` values beyond `draftJustification`; `field` added to
+no other schema; no request/transport-shape change. The typed FE client was regenerated in the same PR
+(`npm run gen:contract` → `contract.ts`) and the hand-authored `models.ts` + `TOOL_LABELS` updated to match, so
+the contract-drift gate + `Conforms` assertion stay green; Spectral clean. **Items 2 & 3 are now Applied;** R1
+(provenance) remains the only open residual, tracked under ADR-0024.
