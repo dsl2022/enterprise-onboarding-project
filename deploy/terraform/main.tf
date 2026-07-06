@@ -146,6 +146,8 @@ module "service" {
   # true only after its Graph permission is admin-consented.
   onboarding_provisioning_real = var.onboarding_provisioning_real
   access_provisioning_real     = var.access_provisioning_real
+  assistant_enabled            = var.assistant_enabled
+  assistant_model_id           = var.assistant_model_id
 }
 
 # SSM pointers for the frontend-deploy workflow (mirrors the /eop/<env>/app_image

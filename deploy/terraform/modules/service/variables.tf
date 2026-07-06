@@ -84,6 +84,21 @@ variable "access_provisioning_real" {
   default     = false
 }
 
+# v2 assistant (Rung 1). Enabling turns on the advisory /assistant/chat + attaches the bedrock:InvokeModel task
+# grant + points the model port at Bedrock. Flip ONLY after Bedrock model access is enabled for the model id in
+# this region (RUNBOOK). Default false = /assistant/chat stays 501 and no Bedrock grant is attached.
+variable "assistant_enabled" {
+  description = "Enable the Rung-1 advisory assistant (Bedrock-backed). Requires Bedrock model access enabled first."
+  type        = bool
+  default     = false
+}
+
+variable "assistant_model_id" {
+  description = "Bedrock model id for the assistant (Converse). Haiku-tier default; use the us.* inference-profile id if the region requires it."
+  type        = string
+  default     = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+}
+
 # Phase 8 (HA): number of Fargate tasks. Default 2 for high availability (survive one task/AZ loss). Fixed,
 # not autoscaled — autoscaling is a separate later enhancement and is not the same thing as HA.
 variable "desired_count" {

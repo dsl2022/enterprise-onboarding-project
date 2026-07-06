@@ -431,3 +431,45 @@ source of truth); re-provision (null `external_ref` to force the Graph path) →
 > **Scope limit — tenant-broad grant.** `GroupMember.ReadWrite.All` lets the app modify ANY group's
 > membership (Graph has no per-group app-only scope). Fine for dev; constrain/monitor for prod
 > (CR-20260629-0030).
+
+## 11. v2 assistant Rung 1 — enable the Bedrock-backed advisory chat
+
+The assistant (`POST /assistant/chat`) is built and ships **dark**: `501` until `assistant_enabled=true`. Enabling
+it points the model port at Amazon Bedrock (Claude, Converse API) using the **task role** — no stored API key.
+
+**Model access is now automatic.** AWS retired the manual "Model access" page — serverless foundation models
+auto-enable on first invoke (Anthropic models may prompt a one-time use-case form). No pre-activation step. An
+`InvokeModel` test in this account already succeeded (2026-07-05), so nothing manual remains for dev.
+
+**Model id — use the `us.*` inference profile.** Current Claude models on Bedrock are **INFERENCE_PROFILE-only**;
+a bare foundation-model id (e.g. `anthropic.claude-haiku-4-5-20251001-v1:0`) returns
+`ResourceNotFoundException: end of life` / validation errors. The default `assistant_model_id` is the profile
+`us.anthropic.claude-haiku-4-5-20251001-v1:0`. Find the current ids + verify an invoke:
+
+```bash
+# Which Claude models are ACTIVE (and their inference type — expect INFERENCE_PROFILE):
+aws bedrock list-foundation-models --region us-east-1 --by-provider anthropic \
+  --query "modelSummaries[?modelLifecycle.status=='ACTIVE'].[modelId,inferenceTypesSupported]" --output text
+# Sanity-check an invoke via the profile (older CLIs have invoke-model, not converse):
+aws bedrock-runtime invoke-model --region us-east-1 \
+  --model-id us.anthropic.claude-haiku-4-5-20251001-v1:0 \
+  --content-type application/json --accept application/json --cli-binary-format raw-in-base64-out \
+  --body '{"anthropic_version":"bedrock-2023-05-31","max_tokens":16,"messages":[{"role":"user","content":"ping"}]}' \
+  /tmp/out.json && python3 -c "import json;print(json.load(open('/tmp/out.json'))['content'][0]['text'])"
+```
+
+- The task IAM policy is scoped tier-level (`anthropic.claude-haiku-*` / `claude-sonnet-*`, foundation-model +
+  `us.*` inference-profile), so a model **version** bump only needs an `assistant_model_id` change, not IAM.
+
+**Flip on + roll.** `assistant_enabled = true` in `dev.tfvars` (done) → run `infra` + approve. This attaches the
+scoped `bedrock:InvokeModel` grant and sets `EOP_ASSISTANT_ENABLED=true` + `EOP_ASSISTANT_MODEL_PROVIDER=bedrock`
+on the task, then rolls it.
+
+**Verify live:** sign in, open the assistant, and on the onboarding wizard ask it to "draft a description for a
+billing service" → a `draftDescription` proposed action comes back you can accept into the field. Check the task
+logs show **no** `AccessDeniedException` (that means model access isn't granted yet). `/assistant/actions/{id}/approve`
+remains `501` (Rung 3). To turn it back off: `assistant_enabled = false` → apply (grant detaches, endpoint 501s).
+
+> **Guardrail recap.** The model is distrusted: every proposal is re-validated in Java against the four-tool
+> allow-list + per-tool arg rules before it reaches the UI, and the assistant imports no domain module, so it
+> cannot write governed state or call Graph. No transcripts are persisted (metadata log-level only).

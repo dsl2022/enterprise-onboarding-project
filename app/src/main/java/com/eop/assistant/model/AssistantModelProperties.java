@@ -20,12 +20,13 @@ public class AssistantModelProperties {
     private String provider = "";
 
     /**
-     * Bedrock model id (Converse API). Default is a Haiku-tier Claude — Rung 1 is narrow, latency- and
-     * cost-sensitive form-fill, so Haiku is the right default (architect Q1), not a compromise. Override per
-     * env; confirm the model is access-enabled in the account/region first (Bedrock model access is opt-in
-     * per-model-per-region). A single free-prose tool can opt up to Sonnet via {@link ModelRequest#modelIdOverride()}.
+     * Bedrock model id (Converse API). Default is the Haiku-tier Claude inference profile — Rung 1 is narrow,
+     * latency- and cost-sensitive form-fill, so Haiku is the right default (architect Q1), not a compromise.
+     * Current Claude models are INFERENCE_PROFILE-only on Bedrock, so this is a {@code us.*} profile id (a bare
+     * foundation-model id returns end-of-life/validation errors). Override per env. A single free-prose tool can
+     * opt up to Sonnet via {@link ModelRequest#modelIdOverride()}.
      */
-    private String modelId = "anthropic.claude-3-5-haiku-20241022-v1:0";
+    private String modelId = "us.anthropic.claude-haiku-4-5-20251001-v1:0";
 
     /** AWS region for Bedrock. Blank = default provider chain ({@code AWS_REGION}); dev target is us-east-1. */
     private String region = "";

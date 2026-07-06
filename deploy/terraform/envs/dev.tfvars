@@ -36,6 +36,16 @@ entra_app_role_assignments = [
 onboarding_provisioning_real = true
 access_provisioning_real     = false
 
+# ---- v2 assistant (Rung 1): advisory form-fill on /assistant/chat, Bedrock-backed ----
+# Model: Haiku-tier via the us.* inference profile (current Claude models are INFERENCE_PROFILE-only on Bedrock;
+# a bare foundation-model id returns end-of-life/validation errors). The default assistant_model_id
+# (us.anthropic.claude-haiku-4-5-20251001-v1:0) is already correct, so no override is needed here.
+# Bedrock model access is auto-enabled on first invoke now (the manual "Model access" page was retired) — an
+# InvokeModel test against this profile already succeeded in this account (2026-07-05), so no manual activation
+# step remains. Flipping this true attaches the scoped bedrock:InvokeModel grant and turns /assistant/chat from
+# 501 into the live advisory assistant on the next apply/roll.
+assistant_enabled = true
+
 # ---- Phase 8: HA ----
 # App tier runs 2 Fargate tasks across 2 AZs (the service module default desired_count=2) — real app-tier HA.
 # Data tier stays SINGLE-AZ in dev (cost): RDS single-AZ + a single-node Redis (a session SPOF, not an outage
