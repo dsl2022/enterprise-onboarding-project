@@ -19,6 +19,7 @@ const SUGGESTIONS: readonly string[] = [
 
 const TOOL_LABELS: Record<ProposedAction['tool'], string> = {
   draftDescription: 'Draft description',
+  draftJustification: 'Draft justification',
   validateRedirectUris: 'Validate redirect URIs',
   recommendScopes: 'Recommend scopes',
   checkGroupOwnership: 'Check group ownership',
